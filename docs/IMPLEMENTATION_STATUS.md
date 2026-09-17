@@ -1,0 +1,60 @@
+# Sanctum Phase 1 実装状況
+
+## 実装済み
+
+| Phase 1 要件 | 実装 |
+|---|---|
+| Project / Vault | staging 内で全構造を作ってから atomic rename。manifest/DB identity 照合、exclusive lock |
+| Hypothesis Block | kind/status/tags/body/research notes、optimistic concurrency、soft delete/Trash |
+| Markdown + LaTeX | Editor/Split/Preview、GFM、inline/display KaTeX、code/table/quote/task/footnote token/citation token |
+| Block Graph | drag/pan/zoom/search/status filter/edge filter、保存済み座標 |
+| Semantic Edge | 9種類、方向、note、soft delete |
+| File / PDF Attachment | relation 付き複数添付、PDF metadata、CAS dedup、SHA-256。Phase 1 は OS viewer / 内蔵 viewer 未接続 |
+| Version History | full immutable snapshot、reason/hash/diff、新 version として restore |
+| Hypothesis Branch | 親 block/version を固定した lineage。merge は未実装 |
+| Autosave | 100ms recovery draft + 700ms immutable version commit。競合は上書きせず停止 |
+| SQLite WAL | bundled SQLite、WAL、FULL synchronous、FK、busy timeout、application ID |
+| Snapshot | Manual/10-minute/Daily/Weekly policy、online backup、zstd readback、clone restore |
+| File Integrity | CAS object 全件 hash 検査、Snapshot/Backup manifest と DB object 一覧の照合 |
+| Backup | 自己完結 archive、Argon2id、chunked XChaCha20-Poly1305、復号後 readback 検証 |
+| Restore | 既存 path 拒否、staging 検証後 atomic publish、DB/履歴/journal/object を復元 |
+| Search | title/body/notes/LaTeX/tags/variables/citations/file metadata の FTS5 |
+| Research Integrity | DB/FK/journal/version/object/snapshot/backup hash、unsupported、rejected dependency、dangling edge、variable conflict、broken citation、orphan、unbacked change |
+| Security | local-first、remote content なし、strict CSP、限定 capability、backup key zeroization |
+
+## 検証結果
+
+- `cargo test -p sanctum-core -- --test-threads=1`: **20 passed**
+- `cargo clippy -p sanctum-core --all-targets -- -D warnings`: **passed**
+- frontend Vitest: **4 passed**
+- Windows durability regression: existing files are reopened read/write before `FlushFileBuffers`; Vault creation, attachments, snapshots, backups, and restores share the tested helper
+- Windows production bundle regression: release buildは`custom-protocol`を必須化し、Tauriがdevelopment modeを報告した場合はbuild scriptが停止。0.1.2実行ファイルへのfrontend埋め込みも検査済み
+- Autosave regression: DBメタデータを除いた正規化snapshotだけを比較し、無変更の再保存を停止。1編集につき1回だけ正式保存するfrontend testを追加
+- TypeScript project build: **passed**
+- Vite production build: **passed**。最大 JavaScript chunk は Markdown 系 約433 kB（gzip 約131 kB）
+- Windows x64 executable: **build passed**。PE32+ / Windows GUI subsystem、外部 GNU runtime DLL 依存なし
+- NSIS installer: **generated and archive-tested**。`sanctum-desktop.exe` と同一の `WebView2Loader.dll` を同梱、LZMA archive test passed
+- Tauri adapter の Linux native check: この実行環境に `pkg-config` / GTK / WebKitGTK development package がないため system dependency build で停止。保存 core、TypeScript、frontend bundle の失敗ではない。CI には公式 Linux prerequisites を入れた desktop check を用意した
+- Windows実機での install / launch / Vault round-trip は、このLinux環境では未実行。Windows runnerで再現可能な installer workflow を追加した
+
+## 意図的に Phase 1 外
+
+- cloud sync、共同編集、AI
+- branch merge UI
+- PDF 本文抽出・annotation locator UI・内蔵PDF renderer
+- live Vault の at-rest encryption
+- BibTeX/CSL/Pandoc export UI
+- mobile client、plugin API
+- CAS object の物理 garbage collection
+
+## 残余リスク
+
+1. 100ms以内の最終 keystroke は process/電源断で失いうる。
+2. local Snapshot は同じ Vault の CAS を共有するため、端末全損には外部 Backup が必要。
+3. live Vault は平文。OS full-disk encryption が必要。
+4. password を失うと encrypted Backup は復号できない。
+5. storage firmware が flush 成功を偽る障害、全コピー同時破壊はアプリだけでは防げない。
+6. Phase 1 installer は未署名のため、Windows SmartScreen が確認を表示する可能性がある。正式配布では信頼された code-signing certificate が必要。
+7. クロス生成したinstallerは構造・内容・hashまで検査済みだが、実Windows上のinstall / launch / uninstall試験は別途必要。
+
+これらを隠して「絶対安全」と表示しない。Research Integrity と Recovery Center は、最後の外部 backup より新しい研究変更も警告する。

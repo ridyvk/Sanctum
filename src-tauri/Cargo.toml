@@ -1,0 +1,27 @@
+[package]
+name = "sanctum-desktop"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "sanctum_desktop_lib"
+# Phase 1 ships as a Windows desktop application. Building all three Tauri
+# library formats at once can trigger a rustc archive bug during GNU
+# cross-compilation; the desktop binary only consumes the Rust rlib.
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+# The Tauri CLI enables this feature for production builds. Without this
+# bridge, Tauri marks even a release binary as `cfg(dev)` and tries to open the
+# Vite development server at localhost instead of the bundled frontend.
+custom-protocol = ["tauri/custom-protocol"]
+
+[dependencies]
+sanctum-core = { path = "../crates/sanctum-core" }
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", default-features = false, features = ["wry"] }
+tauri-plugin-dialog = "2"

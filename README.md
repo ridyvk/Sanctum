@@ -1,1 +1,48 @@
 # Sanctum
+
+Sanctum is a local-first Research OS for preserving hypotheses, evidence, equations, literature, files, graph relations, and the history of how research changed.
+
+Phase 1 is intentionally centered on data integrity: SQLite WAL transactions, immutable block versions, crash-recovery drafts, semantic graph edges, content-addressed attachments, verified snapshots, and read-back-verified encrypted backups.
+
+## Install on Windows
+
+For 64-bit Windows 10/11, download `Sanctum-Setup-0.2.0-x64.exe` and double-click it. The NSIS installer uses per-user installation, so administrator privileges are not required.
+
+This Phase 1 installer is not code-signed. Windows SmartScreen may therefore require **More info → Run anyway**. Verify the published SHA-256 before running it. The installed application bundles `WebView2Loader.dll`; Microsoft Edge WebView2 itself is normally present on supported Windows versions and the installer can bootstrap it when missing.
+
+## Read first
+
+- [Architecture and data model (Japanese)](docs/DESIGN_JA.md)
+- [Data-safety self review (Japanese)](docs/SAFETY_REVIEW.md)
+- [MVP plan](docs/MVP_PLAN.md)
+- [Recovery runbook](docs/RECOVERY_RUNBOOK.md)
+
+## Development
+
+```bash
+npm install
+npm test
+npm run build
+cargo test -p sanctum-core
+npm run tauri dev
+```
+
+The native Windows installer is also built on a Windows runner by the `windows-installer` workflow. Release artifacts must pass the Rust safety tests, frontend tests, production frontend build, native Tauri build, and installer hash step.
+
+The browser-only Vite target is for UI development and explicitly reports that durable Vault operations require the Tauri runtime. It must never claim that research data was saved.
+
+## 0.2.0 editor and UI fix
+
+Version 0.2.0 normalizes block snapshots before change detection, preventing an unchanged block from creating versions in a loop. Routine fast autosaves no longer flash a spinner. The interface now uses a black-and-white dark theme, concise Japanese UI labels, and explicitly styled native select options. The GitHub Actions workflow builds a checked Windows installer for every main-branch update and publishes installer assets for version tags.
+
+## 0.1.2 Windows production-bundle fix
+
+Version 0.1.2 connects the Tauri CLI production feature to `tauri/custom-protocol`, so an installed release loads the frontend embedded in the executable instead of the Vite development URL at `localhost:1420`. A release-build guard now fails the build if Tauri still reports development mode, preventing the same broken installer from being published again.
+
+## 0.1.1 Windows durability fix
+
+Version 0.1.1 reopens already-created files with write access before calling the operating-system durability flush. Windows requires that access for `FlushFileBuffers`; 0.1.0 used a read-only handle and could report `Access is denied (os error 5)` after otherwise successful Vault creation. The same correction covers attachment publishing, snapshots, backups, and restores, with a regression test around the shared helper.
+
+## Security boundary
+
+External backups are encrypted client-side. The live Vault is **not encrypted at rest in Phase 1**; use operating-system full-disk encryption. Never place a live WAL-mode Vault on a network filesystem whose locking semantics are unknown.
