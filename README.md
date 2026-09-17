@@ -6,7 +6,7 @@ Phase 1 is intentionally centered on data integrity: SQLite WAL transactions, im
 
 ## Install on Windows
 
-For 64-bit Windows 10/11, download `Sanctum-Setup-0.2.0-x64.exe` and double-click it. The NSIS installer uses per-user installation, so administrator privileges are not required.
+For 64-bit Windows 10/11, download the latest `Sanctum-Setup-*-x64.exe` from GitHub Releases and double-click it. The NSIS installer uses per-user installation, so administrator privileges are not required.
 
 This Phase 1 installer is not code-signed. Windows SmartScreen may therefore require **More info → Run anyway**. Verify the published SHA-256 before running it. The installed application bundles `WebView2Loader.dll`; Microsoft Edge WebView2 itself is normally present on supported Windows versions and the installer can bootstrap it when missing.
 
@@ -27,9 +27,15 @@ cargo test -p sanctum-core
 npm run tauri dev
 ```
 
-The native Windows installer is also built on a Windows runner by the `windows-installer` workflow. Release artifacts must pass the Rust safety tests, frontend tests, production frontend build, native Tauri build, and installer hash step.
+The native Windows installer is built and signed for the in-app updater on a Windows runner by the `publish-windows-update` workflow. Release artifacts must pass the Rust safety tests, frontend tests, production frontend build, and native Tauri build before they are published.
 
 The browser-only Vite target is for UI development and explicitly reports that durable Vault operations require the Tauri runtime. It must never claim that research data was saved.
+
+## 0.3.0 signed in-app updates
+
+Version 0.3.0 is the one-time updater bootstrap release. After installing it, Sanctum checks the signed GitHub Release feed only while the Home screen is open. An available update can be downloaded and installed from the version control at the bottom of Home. Updating is intentionally unavailable while a Vault is open, so it cannot restart the process during an edit or save.
+
+Updater packages and `latest.json` are signed in CI with a repository secret. The app contains only the public verification key. See [updater release setup](docs/UPDATER_RELEASE.md).
 
 ## 0.2.0 editor and UI fix
 

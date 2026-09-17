@@ -13,6 +13,7 @@ import { api, isDesktopRuntime } from "../api";
 import { formatDate } from "../labels";
 import { loadRecentVaults, rememberVault, type RecentVault } from "../recentVaults";
 import type { VaultSummary } from "../types";
+import AppUpdater from "./AppUpdater";
 
 interface Props {
   onOpened: (summary: VaultSummary) => void;
@@ -29,6 +30,7 @@ export default function Home({ onOpened }: Props) {
   const [archivePath, setArchivePath] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const safeFolderName = useMemo(
@@ -126,10 +128,10 @@ export default function Home({ onOpened }: Props) {
             <h2 id="projects-heading">研究</h2>
           </div>
           <div className="home-actions">
-            <button className="button secondary" disabled={!desktop || busy} onClick={() => void openPath()}>
+            <button className="button secondary" disabled={!desktop || busy || updating} onClick={() => void openPath()}>
               <FolderOpen size={16} /> Vaultを開く
             </button>
-            <button className="button primary" disabled={!desktop || busy} onClick={() => { setError(null); setModal("new"); }}>
+            <button className="button primary" disabled={!desktop || busy || updating} onClick={() => { setError(null); setModal("new"); }}>
               <Plus size={16} /> 新規作成
             </button>
           </div>
@@ -140,7 +142,7 @@ export default function Home({ onOpened }: Props) {
         {recent.length ? (
           <div className="project-grid">
             {recent.map((project, index) => (
-              <button className="project-card" key={`${project.vaultId}-${project.path}`} onClick={() => void openPath(project.path)} disabled={!desktop || busy}>
+              <button className="project-card" key={`${project.vaultId}-${project.path}`} onClick={() => void openPath(project.path)} disabled={!desktop || busy || updating}>
                 <div className="project-card-top">
                   <span className={`project-index tone-${index % 4}`}>{String(index + 1).padStart(2, "0")}</span>
                   <ArrowUpRight size={18} />
@@ -158,9 +160,12 @@ export default function Home({ onOpened }: Props) {
           </div>
         )}
 
-        <button className="restore-link" disabled={!desktop || busy} onClick={() => { setError(null); setModal("restore"); }}>
-          <ArchiveRestore size={15} /> 暗号化Backupから復元
-        </button>
+        <div className="home-footer">
+          <button className="restore-link" disabled={!desktop || busy || updating} onClick={() => { setError(null); setModal("restore"); }}>
+            <ArchiveRestore size={15} /> 暗号化Backupから復元
+          </button>
+          <AppUpdater desktop={desktop} onInstallStateChange={setUpdating} />
+        </div>
       </section>
 
       {modal && (

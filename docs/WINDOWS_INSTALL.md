@@ -3,7 +3,7 @@
 ## 対象
 
 - 64-bit Windows 10 / 11
-- ファイル: `Sanctum-Setup-0.2.0-x64.exe`
+- ファイル: GitHub Releasesにある最新の`Sanctum-Setup-*-x64.exe`
 
 ## インストール
 
@@ -22,7 +22,7 @@
 PowerShellで次を実行し、配布時に示されたSHA-256と一致することを確認する。
 
 ```powershell
-Get-FileHash .\Sanctum-Setup-0.2.0-x64.exe -Algorithm SHA256
+Get-FileHash .\Sanctum-Setup-0.3.0-x64.exe -Algorithm SHA256
 ```
 
 ## 現在の注意点
@@ -30,6 +30,12 @@ Get-FileHash .\Sanctum-Setup-0.2.0-x64.exe -Algorithm SHA256
 - Phase 1 installerはcode-signing certificateで未署名。
 - Vault本体はPhase 1ではat-rest暗号化されない。BitLockerなどOSのディスク暗号化を使う。
 - live VaultをOneDrive等の同期フォルダやネットワークドライブへ直接置かない。外部Backupの保存先として使う。
+
+## 0.3.0以降の更新
+
+0.3.0だけは自動更新機能を導入するため、インストーラーを一度ダウンロードして上書きインストールする。以後はVaultを閉じてホーム画面を開き、右下の`更新を確認`を押す。新しい版がある場合は`vX.Y.Zへ更新`に変わるので、そのボタンを押すと署名検証、ダウンロード、インストール、再起動まで自動で進む。
+
+Vaultを開いている間は、編集中のデータを守るため更新操作を表示しない。
 
 ## 0.1.1から更新する場合
 
