@@ -11,6 +11,7 @@ const IntegrityView = lazy(() => import("./IntegrityView"));
 const RecoveryCenter = lazy(() => import("./RecoveryCenter"));
 
 type View = "editor" | "graph" | "integrity" | "recovery";
+const commonStatuses = ["Idea", "Testing", "Supported", "Rejected"] as const;
 
 interface Props {
   vault: VaultSummary;
@@ -31,6 +32,7 @@ export default function Workspace({ vault, onClose }: Props) {
   const [query, setQuery] = useState("");
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [advancedNavigation, setAdvancedNavigation] = useState(false);
   const [message, setMessage] = useState<{ tone: "error" | "notice"; text: string } | null>(null);
 
   const showError = (text: string) => setMessage({ tone: "error", text });
@@ -58,7 +60,6 @@ export default function Workspace({ vault, onClose }: Props) {
         setBlocks(nextBlocks);
         setGraph(nextGraph);
         if (nextBlocks[0]) await selectBlock(nextBlocks[0].id, false);
-        void api.createDueSnapshots().then(() => api.summary()).then(setCurrentVault).catch((cause) => showError(`自動Snapshotに失敗した: ${String(cause)}`));
       } catch (cause) {
         showError(cause instanceof Error ? cause.message : String(cause));
       } finally {
@@ -70,9 +71,16 @@ export default function Workspace({ vault, onClose }: Props) {
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      void api.createDueSnapshots().then(() => api.summary()).then(setCurrentVault).catch((cause) => showError(`自動Snapshotに失敗した: ${String(cause)}`));
-    }, 60_000);
+    const runMaintenance = () => {
+      void api.createDueSnapshots().then((created) => {
+        if (created.length) void api.summary().then(setCurrentVault);
+      }).catch((cause) => showError(`自動Snapshotに失敗した: ${String(cause)}`));
+      void api.runDueAutomaticBackup().then((created) => {
+        if (created) void api.summary().then(setCurrentVault);
+      }).catch((cause) => showError(`自動Backupに失敗した: ${String(cause)}`));
+    };
+    runMaintenance();
+    const timer = window.setInterval(runMaintenance, 15 * 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -101,12 +109,12 @@ export default function Workspace({ vault, onClose }: Props) {
     try {
       const block = await api.createBlock({
         title: "無題の仮説",
-        bodyMarkdown: "## 研究の問い\n\n検証できる主張を書く。\n\n## モデル\n\n$$\nY = f(X)\n$$\n",
+        bodyMarkdown: "",
         researchNotesMarkdown: "",
         kind: "Hypothesis",
         status: "Idea",
         tags: [],
-        changeReason: "仮説を作成",
+        changeReason: "作成",
       });
       await Promise.all([refreshBlocks(), refreshGraph()]);
       setSelected(block); setRecovery(null); setView("editor");
@@ -138,13 +146,17 @@ export default function Workspace({ vault, onClose }: Props) {
     showNotice("ブロックをゴミ箱へ移動した。履歴は残っている");
   };
 
-  const filteredBlocks = useMemo(() => blocks.filter((block) => statusFilter === "all" || block.status === statusFilter), [blocks, statusFilter]);
+  const filteredBlocks = useMemo(() => blocks.filter((block) => {
+    if (statusFilter === "all") return true;
+    if (statusFilter === "other") return !commonStatuses.includes(block.status as typeof commonStatuses[number]);
+    return block.status === statusFilter;
+  }), [blocks, statusFilter]);
 
   return (
     <main className="workspace">
       <header className="workspace-topbar">
         <div className="workspace-brand"><button className="text-button" onClick={() => void onClose()}>戻る</button><div><strong>{currentVault.name}</strong><span>リビジョン {currentVault.revision}</span></div></div>
-        <div className="global-search"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="タイトル・本文・LaTeX・変数・文献を検索" />{query && <button onClick={() => setQuery("")}>消す</button>}{searchHits.length > 0 && <div className="search-results">{searchHits.map((hit) => <button key={hit.blockId} onClick={() => void selectBlock(hit.blockId)}><strong>{hit.title}</strong><span>{hit.excerpt}</span></button>)}</div>}</div>
+        <div className="global-search"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="本文・変数・文献・ファイルを検索" />{query && <button onClick={() => setQuery("")}>消す</button>}{searchHits.length > 0 && <div className="search-results">{searchHits.map((hit) => <button key={hit.blockId} onClick={() => void selectBlock(hit.blockId)}><strong>{hit.title}</strong><span>{hit.excerpt}</span></button>)}</div>}</div>
         <div className="topbar-safety"><span>ローカル保存</span></div>
       </header>
 
@@ -153,18 +165,18 @@ export default function Workspace({ vault, onClose }: Props) {
           <div className="navigator-tabs">
             <button className={view === "editor" ? "active" : ""} onClick={() => setView("editor")}>ブロック</button>
             <button className={view === "graph" ? "active" : ""} onClick={() => setView("graph")}>グラフ</button>
-            <button className={view === "integrity" ? "active" : ""} onClick={() => setView("integrity")}>検査</button>
-            <button className={view === "recovery" ? "active" : ""} onClick={() => setView("recovery")}>復旧</button>
+            <button className={view === "recovery" ? "active" : ""} onClick={() => setView("recovery")}>データ</button>
+            <button className={advancedNavigation ? "active" : ""} onClick={() => { setAdvancedNavigation((value) => !value); if (advancedNavigation && view === "integrity") setView("editor"); }}>詳細</button>
           </div>
+          {advancedNavigation && <button className={`advanced-nav-item ${view === "integrity" ? "active" : ""}`} onClick={() => setView("integrity")}>整合性検査</button>}
 
           <div className="navigator-heading"><div><strong>ブロック</strong><span>{blocks.length}</span></div><button className="text-button" disabled={creating} onClick={() => void createBlock()}>{creating ? "作成中" : "追加"}</button></div>
-          <label className="filter-select"><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">すべての状態</option>{(["Idea", "Developing", "Testing", "Supported", "Weakly Supported", "Rejected", "Archived"] as const).map((status) => <option key={status} value={status}>{blockStatusLabel[status]}</option>)}</select></label>
+          <label className="filter-select"><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">すべて</option>{commonStatuses.map((status) => <option key={status} value={status}>{blockStatusLabel[status]}</option>)}<option value="other">その他</option></select></label>
 
           <nav className="block-list" aria-label="仮説ブロック">
             {filteredBlocks.map((block) => <button key={block.id} className={selected?.id === block.id ? "active" : ""} onClick={() => void selectBlock(block.id)}><span className={`status-dot status-${block.status.toLowerCase().replaceAll(" ", "-")}`} /><div><strong>{block.title}</strong><span>{blockKindLabel[block.kind]} · {block.id.slice(0, 8).toUpperCase()}{block.parentBlockId ? " · 分岐" : ""}</span></div></button>)}
             {!loading && !filteredBlocks.length && <div className="navigator-empty"><p>表示するブロックがない</p><button onClick={() => void createBlock()}>仮説を作成</button></div>}
           </nav>
-          <footer className="navigator-footer">自動保存</footer>
         </aside>
 
         <section className="main-stage">

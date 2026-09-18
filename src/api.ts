@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   Attachment,
+  AttachmentPreview,
   AttachmentRelation,
+  AutomaticBackupStatus,
   BackupRecord,
   BlockCitationRecord,
   BlockVersion,
@@ -12,6 +14,7 @@ import type {
   GraphPosition,
   HypothesisBlock,
   IntegrityReport,
+  PortableExportRecord,
   RecoveryDraft,
   SaveBlockInput,
   SearchHit,
@@ -72,6 +75,9 @@ export const api = {
     locator: Record<string, unknown> = {},
   ) => call<Attachment>("attach_file", { blockId, sourcePath, relation, locator }),
   attachments: (blockId: string) => call<Attachment[]>("attachments_for_block", { blockId }),
+  deleteAttachment: (attachmentId: string) => call<void>("soft_delete_attachment", { attachmentId }),
+  attachmentPreview: (attachmentId: string) => call<AttachmentPreview>("attachment_preview", { attachmentId }),
+  openAttachment: (attachmentId: string) => call<void>("open_attachment", { attachmentId }),
   registerVariable: (symbol: string, definition: string, blockId: string, formula = "") =>
     call<VariableRecord>("register_variable_definition", { input: { symbol, definition, blockId, formula } }),
   variables: () => call<VariableRecord[]>("variables"),
@@ -92,9 +98,15 @@ export const api = {
     call<string>("restore_snapshot_to", { snapshotId, destination }),
   createBackup: (destination: string, password: string) =>
     call<BackupRecord>("create_encrypted_backup", { destination, password }),
+  exportPortable: (parentDirectory: string) =>
+    call<PortableExportRecord>("export_portable", { parentDirectory }),
+  automaticBackupStatus: () => call<AutomaticBackupStatus>("automatic_backup_status"),
+  configureAutomaticBackup: (destinationDirectory: string, password: string) =>
+    call<AutomaticBackupStatus>("configure_automatic_backup", { destinationDirectory, password }),
+  disableAutomaticBackup: () => call<AutomaticBackupStatus>("disable_automatic_backup"),
+  runDueAutomaticBackup: () => call<BackupRecord | null>("run_due_automatic_backup"),
   backups: () => call<BackupRecord[]>("backups"),
   verifyBackup: (archive: string, password: string) => call<void>("verify_encrypted_backup", { archive, password }),
   restoreBackup: (archive: string, password: string, destination: string) =>
     call<string>("restore_encrypted_backup_to", { archive, password, destination }),
 };
-

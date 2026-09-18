@@ -125,6 +125,11 @@ export interface Attachment {
   deletedAt: string | null;
 }
 
+export interface AttachmentPreview {
+  mediaType: string;
+  dataBase64: string;
+}
+
 export interface VariableDefinition {
   id: string;
   blockId: string;
@@ -202,3 +207,26 @@ export interface BackupRecord {
   verifiedAt: string;
 }
 
+export interface PortableExportRecord {
+  destinationPath: string;
+  exportedAt: string;
+  sourceRevision: number;
+  blockCount: number;
+  attachmentCount: number;
+  citationCount: number;
+  manifestSha256: string;
+}
+
+export interface AutomaticBackupConfig {
+  enabled: boolean;
+  destinationDirectory: string;
+  intervalHours: number;
+  lastSuccessAt: string | null;
+  updatedAt: string;
+}
+
+export interface AutomaticBackupStatus {
+  config: AutomaticBackupConfig;
+  hasCredential: boolean;
+  due: boolean;
+}

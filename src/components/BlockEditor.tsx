@@ -37,15 +37,8 @@ interface Props {
   onError: (message: string) => void;
 }
 
-const statuses: BlockStatus[] = [
-  "Idea",
-  "Developing",
-  "Testing",
-  "Supported",
-  "Weakly Supported",
-  "Rejected",
-  "Archived",
-];
+const commonStatuses: BlockStatus[] = ["Idea", "Testing", "Supported", "Rejected"];
+const detailedStatuses: BlockStatus[] = ["Developing", "Weakly Supported", "Archived"];
 
 const kinds: BlockKind[] = ["Hypothesis", "Assumption", "Method", "Evidence"];
 
@@ -147,8 +140,8 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
         setSaveState("error");
         onError(`復旧用の下書きを保存できなかった: ${cause instanceof Error ? cause.message : String(cause)}`);
       });
-    }, 100);
-    const saveTimer = window.setTimeout(() => void commit(candidate, generation), 700);
+    }, 300);
+    const saveTimer = window.setTimeout(() => void commit(candidate, generation), 1_500);
     return () => {
       window.clearTimeout(draftTimer);
       window.clearTimeout(saveTimer);
@@ -226,7 +219,8 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
         <input className="title-input" value={form.title} onChange={(event) => updateForm({ title: event.target.value })} aria-label="タイトル" />
         <div className="meta-row">
           <select className={`status-select status-${form.status.toLowerCase().replaceAll(" ", "-")}`} value={form.status} onChange={(event) => updateForm({ status: event.target.value as BlockStatus })}>
-            {statuses.map((status) => <option key={status} value={status}>{blockStatusLabel[status]}</option>)}
+            <optgroup label="状態">{commonStatuses.map((status) => <option key={status} value={status}>{blockStatusLabel[status]}</option>)}</optgroup>
+            <optgroup label="詳細">{detailedStatuses.map((status) => <option key={status} value={status}>{blockStatusLabel[status]}</option>)}</optgroup>
           </select>
           <input className="tags-input" value={form.tags} onChange={(event) => updateForm({ tags: event.target.value })} placeholder="タグ（カンマ区切り）" aria-label="タグ" />
           <input className="reason-input" value={form.changeReason} onChange={(event) => updateForm({ changeReason: event.target.value })} placeholder="変更理由" aria-label="変更理由" />

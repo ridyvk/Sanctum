@@ -1,13 +1,20 @@
+mod credentials;
+
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use sanctum_core::{
-    Attachment, AttachmentRelation, BackupRecord, BlockCitationRecord, BlockVersion,
+    Attachment, AttachmentRelation, AutomaticBackupConfig, BackupRecord, BlockCitationRecord, BlockVersion,
     BranchBlockInput, CitationInput, CreateBlockInput, CreateEdgeInput, GraphData, GraphPosition,
     HypothesisBlock, IntegrityReport, RecoveryDraft, SaveBlockInput, SearchHit, SnapshotKind,
     SnapshotManifest, SnapshotRecord, VariableDefinitionInput, VariableRecord, Vault, VaultSummary,
+    PortableExportRecord,
 };
 use serde::Serialize;
 use serde_json::Value;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use zeroize::Zeroizing;
 
 #[derive(Default)]
 struct AppState {
@@ -28,6 +35,29 @@ impl From<sanctum_core::SanctumError> for CommandError {
             message: error.to_string(),
         }
     }
+}
+
+impl From<std::io::Error> for CommandError {
+    fn from(error: std::io::Error) -> Self {
+        Self {
+            message: error.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AttachmentPreview {
+    media_type: String,
+    data_base64: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AutomaticBackupStatus {
+    config: AutomaticBackupConfig,
+    has_credential: bool,
+    due: bool,
 }
 
 fn active(state: &tauri::State<'_, AppState>) -> CommandResult<Arc<Vault>> {
@@ -220,6 +250,64 @@ fn attachments_for_block(
 }
 
 #[tauri::command]
+fn soft_delete_attachment(
+    state: tauri::State<'_, AppState>,
+    attachment_id: String,
+) -> CommandResult<()> {
+    Ok(active(&state)?.soft_delete_attachment(&attachment_id)?)
+}
+
+#[tauri::command]
+fn attachment_preview(
+    state: tauri::State<'_, AppState>,
+    attachment_id: String,
+) -> CommandResult<AttachmentPreview> {
+    const MAX_PREVIEW_BYTES: i64 = 12 * 1024 * 1024;
+    let vault = active(&state)?;
+    let attachment = vault.attachment(&attachment_id)?;
+    let media_type = attachment.media_type.ok_or_else(|| CommandError {
+        message: "このファイル形式はプレビューできない".into(),
+    })?;
+    if !matches!(media_type.as_str(), "image/png" | "image/jpeg" | "image/webp") {
+        return Err(CommandError {
+            message: "画像以外は外部アプリで開いて".into(),
+        });
+    }
+    if attachment.byte_size > MAX_PREVIEW_BYTES {
+        return Err(CommandError {
+            message: "12 MBを超える画像は外部アプリで開いて".into(),
+        });
+    }
+    let path = vault.attachment_object_path(&attachment_id)?;
+    Ok(AttachmentPreview {
+        media_type,
+        data_base64: BASE64.encode(fs::read(path)?),
+    })
+}
+
+#[tauri::command]
+fn open_attachment(
+    state: tauri::State<'_, AppState>,
+    attachment_id: String,
+) -> CommandResult<()> {
+    let vault = active(&state)?;
+    let attachment = vault.attachment(&attachment_id)?;
+    let source = vault.attachment_object_path(&attachment_id)?;
+    let directory = std::env::temp_dir()
+        .join("Sanctum")
+        .join(safe_path_component(&attachment.id));
+    fs::create_dir_all(&directory)?;
+    let target = directory.join(format!(
+        "{}-{}",
+        attachment.id.get(..8).unwrap_or(&attachment.id),
+        safe_path_component(&attachment.display_name)
+    ));
+    fs::copy(source, &target)?;
+    open_with_default_application(&target)?;
+    Ok(())
+}
+
+#[tauri::command]
 fn register_variable_definition(
     state: tauri::State<'_, AppState>,
     input: VariableDefinitionInput,
@@ -309,7 +397,110 @@ fn create_encrypted_backup(
     destination: String,
     password: String,
 ) -> CommandResult<BackupRecord> {
-    Ok(active(&state)?.create_encrypted_backup(destination, &password)?)
+    let password = Zeroizing::new(password);
+    Ok(active(&state)?.create_encrypted_backup(destination, password.as_str())?)
+}
+
+#[tauri::command]
+fn export_portable(
+    state: tauri::State<'_, AppState>,
+    parent_directory: String,
+) -> CommandResult<PortableExportRecord> {
+    Ok(active(&state)?.export_portable_to(parent_directory)?)
+}
+
+#[tauri::command]
+fn automatic_backup_status(
+    state: tauri::State<'_, AppState>,
+) -> CommandResult<AutomaticBackupStatus> {
+    let vault = active(&state)?;
+    let config = vault.automatic_backup_config()?;
+    let target = automatic_backup_credential_target(&vault)?;
+    let due = vault.automatic_backup_due(&config)?;
+    Ok(AutomaticBackupStatus {
+        config,
+        has_credential: credentials::has_password(&target),
+        due,
+    })
+}
+
+#[tauri::command]
+fn configure_automatic_backup(
+    state: tauri::State<'_, AppState>,
+    destination_directory: String,
+    password: String,
+) -> CommandResult<AutomaticBackupStatus> {
+    let password = Zeroizing::new(password);
+    if password.chars().count() < 12 {
+        return Err(CommandError {
+            message: "Backupのパスワードは12文字以上にして".into(),
+        });
+    }
+    let vault = active(&state)?;
+    let destination = PathBuf::from(&destination_directory);
+    if !destination.is_dir() {
+        return Err(CommandError {
+            message: "自動Backupの保存先フォルダが見つからない".into(),
+        });
+    }
+    let target = automatic_backup_credential_target(&vault)?;
+    credentials::write_password(&target, password.as_str())?;
+    let config_result = vault.save_automatic_backup_config(true, &destination, None);
+    let config = match config_result {
+        Ok(config) => config,
+        Err(error) => {
+            let _ = credentials::delete_password(&target);
+            return Err(error.into());
+        }
+    };
+    Ok(AutomaticBackupStatus {
+        due: vault.automatic_backup_due(&config)?,
+        config,
+        has_credential: true,
+    })
+}
+
+#[tauri::command]
+fn disable_automatic_backup(
+    state: tauri::State<'_, AppState>,
+) -> CommandResult<AutomaticBackupStatus> {
+    let vault = active(&state)?;
+    let previous = vault.automatic_backup_config()?;
+    let target = automatic_backup_credential_target(&vault)?;
+    credentials::delete_password(&target)?;
+    let config = vault.save_automatic_backup_config(
+        false,
+        PathBuf::from(&previous.destination_directory),
+        previous.last_success_at,
+    )?;
+    Ok(AutomaticBackupStatus {
+        config,
+        has_credential: false,
+        due: false,
+    })
+}
+
+#[tauri::command]
+fn run_due_automatic_backup(
+    state: tauri::State<'_, AppState>,
+) -> CommandResult<Option<BackupRecord>> {
+    let vault = active(&state)?;
+    let config = vault.automatic_backup_config()?;
+    if !vault.automatic_backup_due(&config)? {
+        return Ok(None);
+    }
+    let target = automatic_backup_credential_target(&vault)?;
+    let password = credentials::read_password(&target).map_err(|_| CommandError {
+        message: "自動BackupのパスワードをWindowsから取得できない。復旧画面で設定し直して".into(),
+    })?;
+    let destination = vault.next_automatic_backup_path(&config)?;
+    let record = vault.create_encrypted_backup(destination, password.as_str())?;
+    vault.save_automatic_backup_config(
+        true,
+        PathBuf::from(&config.destination_directory),
+        Some(record.created_at.clone()),
+    )?;
+    Ok(Some(record))
 }
 
 #[tauri::command]
@@ -319,7 +510,8 @@ fn backups(state: tauri::State<'_, AppState>) -> CommandResult<Vec<BackupRecord>
 
 #[tauri::command]
 fn verify_encrypted_backup(archive: String, password: String) -> CommandResult<()> {
-    Ok(Vault::verify_encrypted_backup(archive, &password)?)
+    let password = Zeroizing::new(password);
+    Ok(Vault::verify_encrypted_backup(archive, password.as_str())?)
 }
 
 #[tauri::command]
@@ -328,8 +520,9 @@ fn restore_encrypted_backup_to(
     password: String,
     destination: String,
 ) -> CommandResult<String> {
+    let password = Zeroizing::new(password);
     Ok(
-        Vault::restore_encrypted_backup_to(archive, &password, destination)?
+        Vault::restore_encrypted_backup_to(archive, password.as_str(), destination)?
             .to_string_lossy()
             .into_owned(),
     )
@@ -366,6 +559,9 @@ pub fn run() {
             set_graph_position,
             attach_file,
             attachments_for_block,
+            soft_delete_attachment,
+            attachment_preview,
+            open_attachment,
             register_variable_definition,
             variables,
             add_citation,
@@ -378,10 +574,86 @@ pub fn run() {
             verify_snapshot,
             restore_snapshot_to,
             create_encrypted_backup,
+            export_portable,
+            automatic_backup_status,
+            configure_automatic_backup,
+            disable_automatic_backup,
+            run_due_automatic_backup,
             backups,
             verify_encrypted_backup,
             restore_encrypted_backup_to
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Sanctum desktop runtime");
+}
+
+fn automatic_backup_credential_target(vault: &Vault) -> CommandResult<String> {
+    Ok(format!(
+        "Sanctum/{}/automatic-backup",
+        vault.summary()?.vault_id
+    ))
+}
+
+fn safe_path_component(value: &str) -> String {
+    let value = value
+        .chars()
+        .map(|character| match character {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '-',
+            character if character.is_control() => '-',
+            character => character,
+        })
+        .collect::<String>();
+    let value = value.trim_matches(|character: char| character == ' ' || character == '.');
+    if value.is_empty() {
+        "attachment".into()
+    } else {
+        value.chars().take(180).collect()
+    }
+}
+
+#[cfg(windows)]
+fn open_with_default_application(path: &std::path::Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr;
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    let operation = "open\0".encode_utf16().collect::<Vec<_>>();
+    let file = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let result = unsafe {
+        ShellExecuteW(
+            0,
+            operation.as_ptr(),
+            file.as_ptr(),
+            ptr::null(),
+            ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    } as isize;
+    if result > 32 {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(format!(
+            "default application could not open the attachment (ShellExecuteW {result})"
+        )))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn open_with_default_application(path: &std::path::Path) -> std::io::Result<()> {
+    std::process::Command::new("open").arg(path).spawn()?.wait()?;
+    Ok(())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn open_with_default_application(path: &std::path::Path) -> std::io::Result<()> {
+    std::process::Command::new("xdg-open")
+        .arg(path)
+        .spawn()?
+        .wait()?;
+    Ok(())
 }

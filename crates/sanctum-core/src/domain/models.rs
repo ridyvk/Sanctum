@@ -486,6 +486,28 @@ pub struct BackupRecord {
     pub verified_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PortableExportRecord {
+    pub destination_path: String,
+    pub exported_at: String,
+    pub source_revision: i64,
+    pub block_count: usize,
+    pub attachment_count: usize,
+    pub citation_count: usize,
+    pub manifest_sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AutomaticBackupConfig {
+    pub enabled: bool,
+    pub destination_directory: String,
+    pub interval_hours: u32,
+    pub last_success_at: Option<String>,
+    pub updated_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SnapshotManifest {

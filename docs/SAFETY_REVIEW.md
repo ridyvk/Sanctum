@@ -10,7 +10,7 @@
 
 | ID | リスク | 影響 | 対策 | 残余リスク |
 |---|---|---|---|---|
-| R1 | WebView/OS が編集中に停止 | 直近入力喪失 | 100ms recovery draft + 700ms immutable autosave | 最後の約100ms、storage 自体の故障 |
+| R1 | WebView/OS が編集中に停止 | 直近入力喪失 | 300ms recovery draft + 1500ms immutable autosave | 最後の約300ms、storage 自体の故障 |
 | R2 | DB commit 前に成功表示 | 利用者が保存済みと誤認 | transaction commit 後だけ成功応答 | OS/drive が flush を偽る場合 |
 | R3 | last-write-wins | 別 window の変更消失 | `row_version` optimistic concurrency | 手動解決は必要 |
 | R4 | WAL/DB の不適切な file copy | 復元不能 snapshot | SQLite Online Backup API | SQLite/OS 下層障害 |
@@ -47,7 +47,7 @@
 
 | Crash point | 再起動後 |
 |---|---|
-| recovery draft transaction 前 | 最後に commit 済み version。最大約100msの入力は失いうる |
+| recovery draft transaction 前 | 最後に commit 済み version。最大約300msの入力は失いうる |
 | draft commit 後、正式 save 前 | recovery prompt から本文を救出可能 |
 | block transaction 中 | transaction 全体 rollback、直前 version が current |
 | block commit 後、journal 書込前 | outbox が残り open 時に journal を生成 |

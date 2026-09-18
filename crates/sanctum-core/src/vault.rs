@@ -877,7 +877,7 @@ impl Vault {
         }
         let now = utc_now();
         let proposed_id = Uuid::new_v4().to_string();
-        let link_id = Uuid::new_v4().to_string();
+        let proposed_link_id = Uuid::new_v4().to_string();
         let mut connection = self.connection.lock().expect("vault mutex poisoned");
         journal::drain_outbox(&mut connection, &self.root)?;
         let transaction = connection.transaction()?;
@@ -898,9 +898,21 @@ impl Vault {
             [input.citation_key.trim()],
             |row| row.get(0),
         )?;
+        let existing_link: Option<String> = transaction
+            .query_row(
+                "SELECT id FROM block_citations
+                 WHERE block_id=?1 AND citation_id=?2 AND deleted_at IS NULL
+                 ORDER BY created_at LIMIT 1",
+                params![block_id, citation_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let link_id = existing_link.unwrap_or(proposed_link_id);
         transaction.execute(
             "INSERT INTO block_citations(id,block_id,citation_id,quote_text,locator_json,created_at,deleted_at)
-             VALUES(?1,?2,?3,?4,?5,?6,NULL)",
+             VALUES(?1,?2,?3,?4,?5,?6,NULL)
+             ON CONFLICT(id) DO UPDATE SET quote_text=excluded.quote_text,
+             locator_json=excluded.locator_json,deleted_at=NULL",
             params![link_id, block_id, citation_id, quote_text, serde_json::to_string(&locator)?, now],
         )?;
         let mut linked_statement = transaction.prepare(

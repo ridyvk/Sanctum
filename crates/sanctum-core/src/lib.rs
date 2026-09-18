@@ -1,7 +1,9 @@
 mod backup;
+mod automatic_backup;
 mod db;
 pub mod domain;
 mod error;
+mod export;
 mod journal;
 mod object_store;
 mod snapshot;

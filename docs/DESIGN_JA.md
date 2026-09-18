@@ -66,6 +66,8 @@ Project.sanctum/
 │       └── sanctum.sqlite.zst
 ├── staging/
 ├── quarantine/
+├── settings/
+│   └── automatic-backup/      # append-only設定。passwordは含まない
 └── vault.lock
 ```
 
@@ -110,7 +112,7 @@ interface BlockSnapshot {
 
 Markdown 内に inline/display LaTeX、code、table、quote、footnote、task list、画像・PDF link、citation token を保持する。画像・PDF の実体と citation は別テーブルで参照する。`row_version` による optimistic concurrency を使い、暗黙の last-write-wins は禁止する。
 
-通常 autosave は 700ms debounce。さらに 100ms debounce の recovery draft を DB に置き、WebView crash と immutable version commit の間を狭める。draft は履歴ではなく回復候補であり、対応する内容の正式 commit が成功した時だけ削除する。
+通常 autosave は 1500ms debounce。さらに 300ms debounce の recovery draft を DB に置き、WebView crash と immutable version commit の間を狭める。draft は履歴ではなく回復候補であり、対応する内容の正式 commit が成功した時だけ削除する。
 
 ## 5. Graph / Edge Data Model
 
@@ -152,7 +154,7 @@ flowchart TD
     READBACK --> PUBLISH["append-only backup 公開"]
 ```
 
-Backup は DB、全 CAS object、Vault manifest、journal を含む自己完結 archive。password から Argon2id で一時鍵を導出し、chunk ごとに XChaCha20-Poly1305 で認証暗号化する。鍵は zeroizing memory に置く。平文 password と鍵は保存しない。
+Backup は DB、全 CAS object、Vault manifest、journal を含む自己完結 archive。password から Argon2id で一時鍵を導出し、chunk ごとに XChaCha20-Poly1305 で認証暗号化する。鍵は zeroizing memory に置く。手動Backupのpasswordは保存しない。自動Backupを有効にした場合だけpasswordをWindows Credential Managerへ保存し、Vaultの設定ファイルには保存先・実行時刻・有効状態だけをappend-onlyで記録する。
 
 restore は path traversal、symbolic/hard link、重複 path、allowlist 外 path、過大展開、空き容量不足を拒否する。復元は `<destination>.restoring-*` で完了・検証してから destination へ atomic rename する。
 
@@ -169,11 +171,11 @@ Snapshot は online backup した SQLite を zstd 圧縮し、DB hash/byte size/
 
 ## 9. Security Model
 
-- Local-first。Phase 1 は外部通信を必要としない。
+- Local-first。保存・検索・エクスポート・Backupは外部通信を必要としない。DOI取込を選んだ時だけCrossref APIへ接続する。
 - Project isolation。Tauri command は open 済み Vault handle 内だけを操作する。
 - strict CSP、remote content 禁止、raw HTML rendering 禁止。
 - Tauri capability は main window と必要な dialog のみに限定する。
-- 外部 backup は client-side encrypted。password を保存しない。
+- 外部 backup は client-side encrypted。自動BackupのpasswordだけWindows Credential Managerへ保存する。
 - live DB は Phase 1 では at-rest 暗号化されない。OS full-disk encryption を推奨し、UI で偽の保護表示をしない。
 - 将来 keychain を使う場合も、project key を OS credential store に包んで置く。
 
@@ -184,11 +186,11 @@ flowchart TD
     HOME["Home\nSANCTUM / Projects"] --> WORK["Project Workspace"]
     WORK --> EDIT["Block Editor\nEditor | Preview"]
     WORK --> GRAPH["Research Graph"]
-    WORK --> INTEGRITY["Research Integrity"]
-    WORK --> RECOVERY["Snapshots / Backups / Trash"]
+    WORK --> DATA["Export / Backups"]
+    WORK --> DETAIL["Integrity / Recovery details"]
 ```
 
-Workspace は左 navigation、中央 editor/graph/integrity、右 inspector。Inspector tabs は Relations / Versions / Files / Variables / Citations / Metadata。破壊的操作には対象名の再入力を要求し、soft-delete 後は Trash から戻せる。
+Workspace は左 navigation、中央 editor/graph/data、右 inspector。通常導線はBlock / Graph / DataとRelations / Versions / Files / Variables / Citationsへ絞り、Integrity / Metadata / Branch / Trashは詳細操作として明示的に開く。破壊的操作には対象名の再入力を要求し、soft-delete 後は Trash から戻せる。
 
 ## 11. MVP implementation order
 

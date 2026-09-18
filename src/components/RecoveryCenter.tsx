@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { api } from "../api";
 import { blockKindLabel, formatDateTime, snapshotKindLabel } from "../labels";
-import type { BackupRecord, HypothesisBlock, SnapshotRecord } from "../types";
+import type { AutomaticBackupStatus, BackupRecord, HypothesisBlock, SnapshotRecord } from "../types";
 
 interface Props {
   onBlocksChanged: () => Promise<void>;
@@ -14,13 +14,22 @@ export default function RecoveryCenter({ onBlocksChanged, onError, onNotice }: P
   const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [trash, setTrash] = useState<HypothesisBlock[]>([]);
+  const [automatic, setAutomatic] = useState<AutomaticBackupStatus | null>(null);
   const [password, setPassword] = useState("");
+  const [automaticPassword, setAutomaticPassword] = useState("");
+  const [automaticDirectory, setAutomaticDirectory] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   const reload = async () => {
     try {
-      const [nextSnapshots, nextBackups, nextTrash] = await Promise.all([api.snapshots(), api.backups(), api.listDeletedBlocks()]);
-      setSnapshots(nextSnapshots); setBackups(nextBackups); setTrash(nextTrash);
+      const [nextSnapshots, nextBackups, nextTrash, nextAutomatic] = await Promise.all([
+        api.snapshots(), api.backups(), api.listDeletedBlocks(), api.automaticBackupStatus(),
+      ]);
+      setSnapshots(nextSnapshots);
+      setBackups(nextBackups);
+      setTrash(nextTrash);
+      setAutomatic(nextAutomatic);
+      setAutomaticDirectory((current) => current || nextAutomatic.config.destinationDirectory);
     } catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
   };
 
@@ -38,8 +47,46 @@ export default function RecoveryCenter({ onBlocksChanged, onError, onNotice }: P
     const destination = await save({ title: "暗号化Backupの保存先", defaultPath: `Sanctum-${new Date().toISOString().slice(0, 10)}.sanctum-backup`, filters: [{ name: "Sanctum backup", extensions: ["sanctum-backup"] }] });
     if (!destination) return;
     setBusy("backup");
-    try { const result = await api.createBackup(destination, password); setPassword(""); onNotice(`暗号化Backupを作成・検証した: ${result.fileName}`); await reload(); }
+    try { const result = await api.createBackup(destination, password); setPassword(""); onNotice(`Backupを作成・検証した: ${result.fileName}`); await reload(); }
     catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(null); }
+  };
+
+  const chooseAutomaticDirectory = async () => {
+    const selected = await open({ multiple: false, directory: true, title: "自動Backupの保存先" });
+    if (typeof selected === "string") setAutomaticDirectory(selected);
+  };
+
+  const configureAutomatic = async () => {
+    if (!automaticDirectory) { onError("自動Backupの保存先を選んで"); return; }
+    if (automaticPassword.length < 12) { onError("自動Backupのパスワードは12文字以上にして"); return; }
+    setBusy("automatic");
+    try {
+      setAutomatic(await api.configureAutomaticBackup(automaticDirectory, automaticPassword));
+      setAutomaticPassword("");
+      onNotice("自動Backupを有効にした");
+      const created = await api.runDueAutomaticBackup();
+      if (created) onNotice(`最初の自動Backupを作成した: ${created.fileName}`);
+      await reload();
+    } catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(null); }
+  };
+
+  const disableAutomatic = async () => {
+    setBusy("automatic");
+    try { setAutomatic(await api.disableAutomaticBackup()); onNotice("自動Backupを停止した"); }
+    catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setBusy(null); }
+  };
+
+  const exportPortable = async () => {
+    const destination = await open({ multiple: false, directory: true, title: "エクスポート先の親フォルダ" });
+    if (typeof destination !== "string") return;
+    setBusy("export");
+    try {
+      const result = await api.exportPortable(destination);
+      onNotice(`完全エクスポートを作成した: ${result.destinationPath}`);
+    } catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(null); }
   };
 
@@ -71,30 +118,42 @@ export default function RecoveryCenter({ onBlocksChanged, onError, onNotice }: P
 
   return (
     <section className="recovery-page">
-      <header className="page-header"><div><h2>復旧</h2></div><button className="button secondary" onClick={() => void reload()}>更新</button></header>
+      <header className="page-header"><h2>データ</h2><button className="button secondary" onClick={() => void reload()}>更新</button></header>
 
-      <div className="recovery-principle"><div><strong>同期とBackupは別</strong><p>端末故障に備えるには、暗号化Backupを別の場所へ保存する</p></div></div>
+      <section className="export-card">
+        <div><h3>完全エクスポート</h3><span>Markdown・添付・BibTeX・関係・変数・ハッシュ</span></div>
+        <button className="button primary" disabled={Boolean(busy)} onClick={() => void exportPortable()}>{busy === "export" ? "書出中" : "書き出す"}</button>
+      </section>
 
       <div className="recovery-grid">
-        <section className="recovery-card">
-          <header><div><h3>Snapshot</h3></div></header>
-          <button className="button secondary full" disabled={Boolean(busy)} onClick={() => void createSnapshot()}>{busy === "snapshot" ? "作成中" : "Snapshotを作成"}</button>
-          <div className="recovery-list">{snapshots.map((snapshot) => <article key={snapshot.id}><div><strong>{snapshotKindLabel[snapshot.kind]}</strong><span>{formatDateTime(snapshot.createdAt)} · リビジョン {snapshot.revision}</span><code>{snapshot.databaseSha256.slice(0, 14)}…</code></div><button className="button ghost compact" disabled={Boolean(busy)} onClick={() => void restoreSnapshot(snapshot)}>{busy === snapshot.id ? "復元中" : "復元"}</button></article>)}{!snapshots.length && <p className="empty-row">Snapshotはまだない</p>}</div>
-          <p className="recovery-caveat">同じ端末内。端末故障には外部Backupが必要</p>
+        <section className="recovery-card featured">
+          <header><h3>自動Backup</h3></header>
+          {automatic?.config.enabled ? <div className="automatic-backup-active"><strong>有効</strong><span title={automatic.config.destinationDirectory}>{automatic.config.destinationDirectory}</span><span>{automatic.config.lastSuccessAt ? `最終 ${formatDateTime(automatic.config.lastSuccessAt)}` : "初回作成待ち"}</span><button className="button secondary full" disabled={Boolean(busy)} onClick={() => void disableAutomatic()}>停止</button></div> : <div className="automatic-backup-form"><button className="directory-field" onClick={() => void chooseAutomaticDirectory()}>{automaticDirectory || "保存先を選ぶ"}</button><label className="password-label">パスワード<input type="password" autoComplete="new-password" value={automaticPassword} onChange={(event) => setAutomaticPassword(event.target.value)} placeholder="12文字以上" /></label><button className="button primary full" disabled={Boolean(busy) || !automaticDirectory || automaticPassword.length < 12} onClick={() => void configureAutomatic()}>{busy === "automatic" ? "設定中" : "有効にする"}</button></div>}
         </section>
 
-        <section className="recovery-card featured">
-          <header><div><h3>暗号化Backup</h3></div></header>
+        <section className="recovery-card">
+          <header><h3>手動Backup</h3></header>
           <label className="password-label">パスワード<input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="12文字以上" /></label>
           <div className="dual-actions"><button className="button primary" disabled={Boolean(busy) || password.length < 12} onClick={() => void createBackup()}>{busy === "backup" ? "作成中" : "作成"}</button><button className="button secondary" disabled={Boolean(busy) || password.length < 12} onClick={() => void verifyExternal()}>{busy === "verify" ? "検証中" : "検証"}</button></div>
-          <div className="recovery-list">{backups.map((backup) => <article key={backup.id}><div><strong>{backup.fileName}</strong><span>{formatDateTime(backup.createdAt)} · {formatBytes(backup.byteSize)}</span><code>{backup.archiveSha256.slice(0, 14)}…</code></div></article>)}{!backups.length && <p className="empty-row">Backupはまだない</p>}</div>
+          <div className="recovery-list">{backups.slice(0, 5).map((backup) => <article key={backup.id}><div><strong>{backup.fileName}</strong><span>{formatDateTime(backup.createdAt)} · {formatBytes(backup.byteSize)}</span></div></article>)}{!backups.length && <p className="empty-row">Backupはまだない</p>}</div>
         </section>
       </div>
 
-      <section className="trash-section">
-        <header><div><div><h3>ゴミ箱</h3></div></div><span>{trash.length}</span></header>
-        <div className="trash-list">{trash.map((block) => <article key={block.id}><div><strong>{block.title}</strong><span>{blockKindLabel[block.kind]} · {block.deletedAt ? formatDateTime(block.deletedAt) : "—"}</span><code>{block.id}</code></div><button className="button secondary compact" disabled={Boolean(busy)} onClick={() => void restoreTrash(block)}>{busy === block.id ? "復元中" : "復元"}</button></article>)}{!trash.length && <p className="empty-row">空</p>}</div>
-      </section>
+      <details className="advanced-recovery">
+        <summary>復旧とゴミ箱</summary>
+        <div className="recovery-grid advanced-grid">
+          <section className="recovery-card">
+            <header><h3>Snapshot</h3></header>
+            <button className="button secondary full" disabled={Boolean(busy)} onClick={() => void createSnapshot()}>{busy === "snapshot" ? "作成中" : "作成"}</button>
+            <div className="recovery-list">{snapshots.map((snapshot) => <article key={snapshot.id}><div><strong>{snapshotKindLabel[snapshot.kind]}</strong><span>{formatDateTime(snapshot.createdAt)} · リビジョン {snapshot.revision}</span></div><button className="button ghost compact" disabled={Boolean(busy)} onClick={() => void restoreSnapshot(snapshot)}>{busy === snapshot.id ? "復元中" : "復元"}</button></article>)}{!snapshots.length && <p className="empty-row">Snapshotはまだない</p>}</div>
+          </section>
+          <section className="recovery-card">
+            <header><h3>ゴミ箱</h3><span>{trash.length}</span></header>
+            <div className="trash-list">{trash.map((block) => <article key={block.id}><div><strong>{block.title}</strong><span>{blockKindLabel[block.kind]} · {block.deletedAt ? formatDateTime(block.deletedAt) : "—"}</span></div><button className="button secondary compact" disabled={Boolean(busy)} onClick={() => void restoreTrash(block)}>{busy === block.id ? "復元中" : "復元"}</button></article>)}{!trash.length && <p className="empty-row">空</p>}</div>
+          </section>
+        </div>
+        <p className="recovery-caveat">Snapshotは同じ端末内。端末故障に備えるには外部Backupを使う</p>
+      </details>
     </section>
   );
 }

@@ -206,6 +206,48 @@ impl Vault {
         Ok(attachments)
     }
 
+    pub fn attachment(&self, attachment_id: &str) -> Result<Attachment> {
+        let connection = self.connection.lock().expect("vault mutex poisoned");
+        let row = connection
+            .query_row(
+                "SELECT a.id,a.block_id,a.object_hash,a.relation_type,a.display_name,o.media_type,o.byte_size,
+                        a.locator_json,a.created_at,a.deleted_at
+                 FROM attachments a JOIN objects o ON o.sha256=a.object_hash
+                 WHERE a.id=?1 AND a.deleted_at IS NULL",
+                [attachment_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, Option<String>>(5)?,
+                        row.get::<_, i64>(6)?,
+                        row.get::<_, String>(7)?,
+                        row.get::<_, String>(8)?,
+                        row.get::<_, Option<String>>(9)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let (id, block_id, hash, relation, name, media, size, locator, created, deleted) = row
+            .ok_or_else(|| SanctumError::InvalidInput("active attachment not found".into()))?;
+        Ok(Attachment {
+            id,
+            block_id,
+            object_hash: hash,
+            relation_type: AttachmentRelation::try_from(relation.as_str())
+                .map_err(SanctumError::Integrity)?,
+            display_name: name,
+            media_type: media,
+            byte_size: size,
+            locator_json: serde_json::from_str(&locator)?,
+            created_at: created,
+            deleted_at: deleted,
+        })
+    }
+
     pub fn attachment_object_path(&self, attachment_id: &str) -> Result<std::path::PathBuf> {
         let connection = self.connection.lock().expect("vault mutex poisoned");
         let hash: Option<String> = connection

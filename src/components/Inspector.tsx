@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { diffWordsWithSpace } from "diff";
 import { api } from "../api";
+import { lookupDoi, parseBibTeX, type CitationDraft } from "../citations";
 import {
   attachmentRelationLabel,
   blockKindLabel,
@@ -32,13 +34,12 @@ interface Props {
   onError: (message: string) => void;
 }
 
-const tabs: { id: Tab; label: string }[] = [
+const tabs: { id: Exclude<Tab, "metadata">; label: string }[] = [
   { id: "relations", label: "関係" },
   { id: "versions", label: "履歴" },
   { id: "files", label: "ファイル" },
   { id: "variables", label: "変数" },
   { id: "citations", label: "文献" },
-  { id: "metadata", label: "情報" },
 ];
 
 const edgeTypes: EdgeType[] = ["Supports", "Contradicts", "Depends on", "Derived from", "Assumes", "Extends", "Tests", "Alternative to", "Related to"];
@@ -80,8 +81,9 @@ export default function Inspector({ block, graph, onBlockChanged, onDeleted, onG
     <aside className="inspector">
       <div className="inspector-tabs" role="tablist">
         {tabs.map((item) => <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>{item.label}</button>)}
+        <button className={tab === "metadata" ? "active" : ""} onClick={() => setTab("metadata")}>詳細</button>
       </div>
-      <header className="inspector-header"><h3>{tabs.find((item) => item.id === tab)?.label}</h3>{loading && <span>読込中</span>}</header>
+      <header className="inspector-header"><h3>{tab === "metadata" ? "詳細" : tabs.find((item) => item.id === tab)?.label}</h3>{loading && <span>読込中</span>}</header>
       <div className="inspector-content">
         {tab === "relations" && <RelationsPanel block={block} graph={graph} onChanged={onGraphChanged} onError={onError} />}
         {tab === "versions" && <VersionsPanel block={block} versions={versions} onRestored={(restored) => { onBlockChanged(restored); void reload(); }} onError={onError} />}
@@ -134,13 +136,68 @@ function VersionsPanel({ block, versions, onRestored, onError }: { block: Hypoth
 
 function FilesPanel({ block, files, onChanged, onError }: { block: HypothesisBlock; files: Attachment[]; onChanged: () => void; onError: (message: string) => void }) {
   const [relation, setRelation] = useState<AttachmentRelation>("Reference");
+  const relationRef = useRef(relation);
+  const [filter, setFilter] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<{ name: string; url: string } | null>(null);
+  useEffect(() => { relationRef.current = relation; }, [relation]);
+
+  const attachPaths = async (paths: string[]) => {
+    if (!paths.length) return;
+    setBusy(true);
+    try {
+      for (const path of paths) await api.attachFile(block.id, path, relationRef.current);
+      onChanged();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    try {
+      getCurrentWebview().onDragDropEvent((event) => {
+        if (event.payload.type === "enter" || event.payload.type === "over") setDragging(true);
+        if (event.payload.type === "leave") setDragging(false);
+        if (event.payload.type === "drop") {
+          setDragging(false);
+          void attachPaths(event.payload.paths);
+        }
+      }).then((stop) => { if (disposed) stop(); else unlisten = stop; }).catch(() => undefined);
+    } catch { /* Browser tests have no native webview. */ }
+    return () => { disposed = true; unlisten?.(); };
+    // The active block intentionally owns the native drop listener.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [block.id]);
+
   const attach = async () => {
-    const selected = await open({ multiple: false, directory: false, title: "添付するファイルを選択" });
-    if (typeof selected !== "string") return;
-    try { await api.attachFile(block.id, selected, relation); onChanged(); }
+    const selected = await open({ multiple: true, directory: false, title: "添付するファイルを選択" });
+    if (!selected) return;
+    await attachPaths(Array.isArray(selected) ? selected : [selected]);
+  };
+  const showPreview = async (file: Attachment) => {
+    try {
+      const result = await api.attachmentPreview(file.id);
+      setPreview({ name: file.displayName, url: `data:${result.mediaType};base64,${result.dataBase64}` });
+    } catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
+  };
+  const remove = async (file: Attachment) => {
+    if (!window.confirm(`「${file.displayName}」を外す？`)) return;
+    try { await api.deleteAttachment(file.id); onChanged(); }
     catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
   };
-  return <div className="panel-stack"><div className="inline-form"><select value={relation} onChange={(event) => setRelation(event.target.value as AttachmentRelation)}>{fileRelations.map((item) => <option key={item} value={item}>{attachmentRelationLabel[item]}</option>)}</select><button className="button primary compact" onClick={() => void attach()}>添付</button></div><div className="inspector-list">{files.map((file) => <div className="file-row" key={file.id}><div><strong>{file.displayName}</strong><span>{attachmentRelationLabel[file.relationType]} · {formatBytes(file.byteSize)}</span><code>{file.objectHash.slice(0, 12)}…</code></div></div>)}{!files.length && <Empty text="添付ファイルはない" />}</div></div>;
+  const visible = files.filter((file) => file.displayName.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()));
+  return <div className="panel-stack">
+    <div className="inline-form"><select value={relation} onChange={(event) => setRelation(event.target.value as AttachmentRelation)}>{fileRelations.map((item) => <option key={item} value={item}>{attachmentRelationLabel[item]}</option>)}</select><button className="button primary compact" disabled={busy} onClick={() => void attach()}>{busy ? "追加中" : "選択"}</button></div>
+    <button className={`file-drop-zone ${dragging ? "active" : ""}`} disabled={busy} onClick={() => void attach()}>{dragging ? "ここへ追加" : "ファイルをドロップ"}</button>
+    {files.length > 5 && <input className="file-filter" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="ファイル名で検索" />}
+    <div className="inspector-list">{visible.map((file) => <div className="file-row file-row-actions" key={file.id}><div><strong title={file.displayName}>{file.displayName}</strong><span>{attachmentRelationLabel[file.relationType]} · {formatBytes(file.byteSize)}</span></div><div className="file-actions">{file.mediaType?.startsWith("image/") && <button className="text-button" onClick={() => void showPreview(file)}>表示</button>}<button className="text-button" onClick={() => void api.openAttachment(file.id).catch((cause) => onError(String(cause)))}>開く</button><button className="text-button danger" onClick={() => void remove(file)}>外す</button></div></div>)}{!visible.length && <Empty text={files.length ? "一致するファイルはない" : "添付ファイルはない"} />}</div>
+    {preview && <div className="attachment-preview" role="dialog" aria-label={preview.name}><header><strong>{preview.name}</strong><button className="text-button" onClick={() => setPreview(null)}>閉じる</button></header><img src={preview.url} alt={preview.name} /></div>}
+  </div>;
 }
 
 function VariablesPanel({ block, variables, onChanged, onError }: { block: HypothesisBlock; variables: VariableRecord[]; onChanged: () => void; onError: (message: string) => void }) {
@@ -157,17 +214,42 @@ function VariablesPanel({ block, variables, onChanged, onError }: { block: Hypot
 }
 
 function CitationsPanel({ block, citations, onChanged, onError }: { block: HypothesisBlock; citations: BlockCitationRecord[]; onChanged: () => void; onError: (message: string) => void }) {
+  const [mode, setMode] = useState<"doi" | "bibtex" | "manual">("doi");
   const [key, setKey] = useState("");
   const [title, setTitle] = useState("");
   const [doi, setDoi] = useState("");
-  const add = async () => {
+  const [bibtex, setBibtex] = useState("");
+  const [busy, setBusy] = useState(false);
+  const addDrafts = async (drafts: CitationDraft[]) => {
+    if (!drafts.length) throw new Error("読み込める文献がない");
+    setBusy(true);
+    try {
+      for (const draft of drafts) await api.addCitation(block.id, draft);
+      onChanged();
+    } finally { setBusy(false); }
+  };
+  const importDoi = async () => {
+    try { await addDrafts([await lookupDoi(doi)]); setDoi(""); }
+    catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
+  };
+  const importBibtex = async () => {
+    try { const drafts = parseBibTeX(bibtex); await addDrafts(drafts); setBibtex(""); }
+    catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
+  };
+  const addManual = async () => {
     if (!key.trim() || !title.trim()) return;
     try {
-      await api.addCitation(block.id, { citationKey: key, title, authors: "", year: null, doi: doi || null, url: null, rawCslJson: {} });
-      setKey(""); setTitle(""); setDoi(""); onChanged();
+      await addDrafts([{ citationKey: key.trim(), title: title.trim(), authors: "", year: null, doi: doi.trim() || null, url: null, rawCslJson: {} }]);
+      setKey(""); setTitle(""); setDoi("");
     } catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
   };
-  return <div className="panel-stack"><div className="compact-form"><input value={key} onChange={(event) => setKey(event.target.value)} placeholder="引用キー" /><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="文献名" /><input value={doi} onChange={(event) => setDoi(event.target.value)} placeholder="DOI（任意）" /><button className="button primary compact" disabled={!key.trim() || !title.trim()} onClick={() => void add()}>登録</button></div><div className="inspector-list">{citations.map((link) => <div className="citation-row" key={link.linkId}><div><strong>[{link.citation.citationKey}] {link.citation.title}</strong><span>{[link.citation.authors, link.citation.year, link.citation.doi].filter(Boolean).join(" · ")}</span>{link.quoteText && <q>{link.quoteText}</q>}</div></div>)}{!citations.length && <Empty text="文献は未登録" />}</div></div>;
+  return <div className="panel-stack">
+    <div className="segmented citation-modes"><button className={mode === "doi" ? "active" : ""} onClick={() => setMode("doi")}>DOI</button><button className={mode === "bibtex" ? "active" : ""} onClick={() => setMode("bibtex")}>BibTeX</button><button className={mode === "manual" ? "active" : ""} onClick={() => setMode("manual")}>手入力</button></div>
+    {mode === "doi" && <div className="compact-form"><input value={doi} onChange={(event) => setDoi(event.target.value)} placeholder="10.xxxx/xxxxx" /><button className="button primary compact" disabled={busy || !doi.trim()} onClick={() => void importDoi()}>{busy ? "取得中" : "DOIから追加"}</button></div>}
+    {mode === "bibtex" && <div className="compact-form"><textarea className="bibtex-input" value={bibtex} onChange={(event) => setBibtex(event.target.value)} placeholder="@article{...}" /><button className="button primary compact" disabled={busy || !bibtex.trim()} onClick={() => void importBibtex()}>{busy ? "読込中" : "BibTeXを読込"}</button></div>}
+    {mode === "manual" && <div className="compact-form"><input value={key} onChange={(event) => setKey(event.target.value)} placeholder="引用キー" /><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="文献名" /><input value={doi} onChange={(event) => setDoi(event.target.value)} placeholder="DOI（任意）" /><button className="button primary compact" disabled={busy || !key.trim() || !title.trim()} onClick={() => void addManual()}>登録</button></div>}
+    <div className="inspector-list">{citations.map((link) => <div className="citation-row" key={link.linkId}><div><strong>[{link.citation.citationKey}] {link.citation.title}</strong><span>{[link.citation.authors, link.citation.year, link.citation.doi].filter(Boolean).join(" · ")}</span>{link.quoteText && <q>{link.quoteText}</q>}</div></div>)}{!citations.length && <Empty text="文献は未登録" />}</div>
+  </div>;
 }
 
 function MetadataPanel({ block, onBlockChanged, onDeleted, onError }: { block: HypothesisBlock; onBlockChanged: (block: HypothesisBlock) => void; onDeleted: (id: string) => void; onError: (message: string) => void }) {

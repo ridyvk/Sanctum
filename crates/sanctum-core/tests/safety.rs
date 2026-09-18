@@ -1,5 +1,6 @@
 use rusqlite::Connection;
 use sanctum_core::*;
+use sha2::{Digest, Sha256};
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -208,22 +209,34 @@ fn variable_conflicts_citations_and_full_text_search_are_structured() {
         })
         .unwrap();
     assert!(variable.has_conflict);
+    let citation_input = CitationInput {
+        citation_key: "smith2024".into(),
+        title: "Mortality and Wealth".into(),
+        authors: "Smith".into(),
+        year: Some(2024),
+        doi: Some("10.1000/example".into()),
+        url: None,
+        raw_csl_json: serde_json::json!({}),
+    };
     vault
         .add_citation(
             &first.snapshot.id,
-            CitationInput {
-                citation_key: "smith2024".into(),
-                title: "Mortality and Wealth".into(),
-                authors: "Smith".into(),
-                year: Some(2024),
-                doi: Some("10.1000/example".into()),
-                url: None,
-                raw_csl_json: serde_json::json!({}),
-            },
+            citation_input.clone(),
             "Mortality falls with access",
             serde_json::json!({"page": 17}),
         )
         .unwrap();
+    vault
+        .add_citation(
+            &first.snapshot.id,
+            citation_input,
+            "Updated quote",
+            serde_json::json!({"page": 18}),
+        )
+        .unwrap();
+    let citations = vault.citations_for_block(&first.snapshot.id).unwrap();
+    assert_eq!(citations.len(), 1);
+    assert_eq!(citations[0].quote_text, "Updated quote");
     let hits = vault.search("mortality", 20).unwrap();
     assert!(hits.iter().any(|hit| hit.block_id == first.snapshot.id));
     let report = vault.integrity_check().unwrap();
@@ -656,4 +669,121 @@ fn a_verified_snapshot_published_before_its_record_is_reconciled_on_open() {
     assert!(snapshots
         .iter()
         .any(|item| item.id == "published-before-record"));
+}
+
+#[test]
+fn portable_export_contains_human_readable_data_and_verified_attachments() {
+    let (temporary, _path, vault) = new_vault();
+    let first = vault.create_block(create_input("Portable model")).unwrap();
+    let second = vault.create_block(create_input("Evidence base")).unwrap();
+    vault
+        .create_edge(CreateEdgeInput {
+            source_block_id: second.snapshot.id.clone(),
+            target_block_id: first.snapshot.id.clone(),
+            edge_type: EdgeType::Supports,
+            note: "Replication evidence".into(),
+        })
+        .unwrap();
+    vault
+        .register_variable_definition(VariableDefinitionInput {
+            symbol: "x".into(),
+            definition: "treatment".into(),
+            block_id: first.snapshot.id.clone(),
+            formula: "x_i".into(),
+        })
+        .unwrap();
+    vault
+        .add_citation(
+            &first.snapshot.id,
+            CitationInput {
+                citation_key: "smith2026".into(),
+                title: "Durable Research".into(),
+                authors: "Jane Smith".into(),
+                year: Some(2026),
+                doi: Some("10.1000/durable".into()),
+                url: None,
+                raw_csl_json: serde_json::json!({"type": "article-journal"}),
+            },
+            "",
+            serde_json::json!({}),
+        )
+        .unwrap();
+    let attachment_source = temporary.path().join("evidence.csv");
+    fs::write(&attachment_source, b"year,value\n2026,1\n").unwrap();
+    let attachment = vault
+        .attach_file(
+            &first.snapshot.id,
+            &attachment_source,
+            AttachmentRelation::Dataset,
+            serde_json::json!({}),
+        )
+        .unwrap();
+
+    let export_parent = temporary.path().join("exports");
+    fs::create_dir(&export_parent).unwrap();
+    let revision_before = vault.summary().unwrap().revision;
+    let exported = vault.export_portable_to(&export_parent).unwrap();
+    assert_eq!(exported.source_revision, revision_before);
+    assert_eq!(exported.block_count, 2);
+    assert_eq!(exported.attachment_count, 1);
+    assert_eq!(exported.citation_count, 1);
+    assert_eq!(vault.summary().unwrap().revision, revision_before);
+
+    let destination = PathBuf::from(&exported.destination_path);
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(destination.join("manifest.json")).unwrap()).unwrap();
+    let files = manifest["files"].as_array().unwrap();
+    for entry in files {
+        let relative = entry["path"].as_str().unwrap();
+        let bytes = fs::read(destination.join(relative)).unwrap();
+        assert_eq!(hex::encode(Sha256::digest(&bytes)), entry["sha256"]);
+    }
+    assert!(fs::read_to_string(destination.join("citations.bib"))
+        .unwrap()
+        .contains("@article{smith2026"));
+    let exported_attachment = files
+        .iter()
+        .find(|entry| entry["path"].as_str().unwrap().contains("attachments/"))
+        .unwrap();
+    assert_eq!(exported_attachment["sha256"], attachment.object_hash);
+
+    assert!(matches!(
+        vault.export_portable(&destination),
+        Err(SanctumError::RefuseOverwrite(_))
+    ));
+}
+
+#[test]
+fn automatic_backup_configuration_is_append_only_and_due_aware() {
+    let (temporary, path, vault) = new_vault();
+    let destination = temporary.path().join("external-backups");
+    fs::create_dir(&destination).unwrap();
+
+    let configured = vault
+        .save_automatic_backup_config(true, &destination, None)
+        .unwrap();
+    assert!(vault.automatic_backup_due(&configured).unwrap());
+    let proposed = vault.next_automatic_backup_path(&configured).unwrap();
+    assert_eq!(proposed.parent(), Some(destination.as_path()));
+    assert_eq!(
+        proposed.extension().and_then(|value| value.to_str()),
+        Some("sanctum-backup")
+    );
+
+    let completed = vault
+        .save_automatic_backup_config(
+            true,
+            &destination,
+            Some(chrono::Utc::now().to_rfc3339()),
+        )
+        .unwrap();
+    assert!(!vault.automatic_backup_due(&completed).unwrap());
+    drop(vault);
+
+    let reopened = Vault::open(path).unwrap();
+    assert_eq!(reopened.automatic_backup_config().unwrap(), completed);
+    let records = fs::read_dir(reopened.root().join("settings/automatic-backup"))
+        .unwrap()
+        .count();
+    assert_eq!(records, 2);
 }

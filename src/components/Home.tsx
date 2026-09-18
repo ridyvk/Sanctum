@@ -130,11 +130,8 @@ export default function Home({ onOpened }: Props) {
 
         {recent.length ? (
           <div className="project-grid">
-            {recent.map((project, index) => (
+            {recent.map((project) => (
               <button className="project-card" key={`${project.vaultId}-${project.path}`} onClick={() => void openPath(project.path)} disabled={!desktop || busy || updating}>
-                <div className="project-card-top">
-                  <span className={`project-index tone-${index % 4}`}>{String(index + 1).padStart(2, "0")}</span>
-                </div>
                 <h3>{project.name}</h3>
                 <p>{project.path}</p>
                 <time>{formatDate(project.lastOpenedAt)}</time>
