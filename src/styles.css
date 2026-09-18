@@ -1,5 +1,5 @@
 :root {
-  --font-ui: "Yu Mincho Light", "Yu Mincho", YuMincho, "Hiragino Mincho ProN", "Hiragino Mincho Pro", "MS PMincho", serif;
+  --font-ui: "Segoe WPC", "Segoe UI", "Yu Gothic UI", "Meiryo UI", Meiryo, sans-serif;
   font-family: var(--font-ui);
   font-weight: 300;
   color-scheme: dark;
@@ -85,7 +85,7 @@
 
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; min-width: 1080px; height: 100%; margin: 0; overflow: hidden; }
-body { background: var(--bg); color: var(--text); font-feature-settings: "palt" 1; font-kerning: normal; letter-spacing: -.018em; }
+body { background: var(--bg); color: var(--text); font-kerning: normal; letter-spacing: normal; }
 button, input, textarea, select { font: inherit; }
 strong, b { font-weight: 500; }
 button { color: inherit; }

@@ -39,7 +39,7 @@ jobs:
             SanctumのWindows版。既存のVaultはそのまま引き継がれる。
 
             v0.3.0以降はSanctumのホーム画面から次の更新を確認・適用できる。
-            v0.3.1では画面内アイコンを撤去し、ライトテーマを白黒に統一、日本語を細い明朝体へ変更した。
+            v0.3.2では日本語をWindows版VS Codeに近い細いUIゴシックへ変更した。
           releaseDraft: false
           prerelease: false
           args: --bundles nsis

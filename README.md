@@ -39,6 +39,10 @@ Version 0.3.0 is the one-time updater bootstrap release. After installing it, Sa
 
 Version 0.3.1 removes on-screen image icons in favor of short text labels, reduces the Home wordmark, uses a compact Mincho stack for Japanese, and makes the light theme strictly monochrome with black as its accent.
 
+## 0.3.2 Windows UI typography
+
+Version 0.3.2 replaces the Mincho stack with the Windows VS Code-style UI stack: Segoe UI for Latin text and Yu Gothic UI for Japanese, with natural letter spacing. Code editors remain monospaced.
+
 Updater packages and `latest.json` are signed in CI with a repository secret. The app contains only the public verification key. See [updater release setup](docs/UPDATER_RELEASE.md).
 
 ## 0.2.0 editor and UI fix
