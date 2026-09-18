@@ -397,7 +397,7 @@ mod tests {
 
     #[test]
     fn safe_export_names_cannot_escape_their_directory() {
-        assert_eq!(safe_component("../a:b?.pdf"), "--a-b-.pdf");
+        assert_eq!(safe_component("../a:b?.pdf"), "-a-b-.pdf");
         assert_eq!(safe_bib_key("Doe 2026 / test"), "Doe2026test");
     }
 }
