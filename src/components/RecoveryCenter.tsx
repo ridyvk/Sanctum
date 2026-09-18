@@ -1,19 +1,5 @@
 import { useEffect, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import {
-  ArchiveRestore,
-  CheckCircle2,
-  Clock3,
-  DatabaseBackup,
-  ExternalLink,
-  FileArchive,
-  HardDrive,
-  LoaderCircle,
-  RefreshCw,
-  RotateCcw,
-  ShieldAlert,
-  Trash2,
-} from "lucide-react";
 import { api } from "../api";
 import { blockKindLabel, formatDateTime, snapshotKindLabel } from "../labels";
 import type { BackupRecord, HypothesisBlock, SnapshotRecord } from "../types";
@@ -85,29 +71,29 @@ export default function RecoveryCenter({ onBlocksChanged, onError, onNotice }: P
 
   return (
     <section className="recovery-page">
-      <header className="page-header"><div><h2>復旧</h2></div><button className="button secondary" onClick={() => void reload()}><RefreshCw size={15} /> 更新</button></header>
+      <header className="page-header"><div><h2>復旧</h2></div><button className="button secondary" onClick={() => void reload()}>更新</button></header>
 
-      <div className="recovery-principle"><ShieldAlert size={20} /><div><strong>同期とBackupは別</strong><p>端末故障に備えるには、暗号化Backupを別の場所へ保存する</p></div></div>
+      <div className="recovery-principle"><div><strong>同期とBackupは別</strong><p>端末故障に備えるには、暗号化Backupを別の場所へ保存する</p></div></div>
 
       <div className="recovery-grid">
         <section className="recovery-card">
-          <header><div className="recovery-icon local"><Clock3 size={18} /></div><div><h3>Snapshot</h3></div></header>
-          <button className="button secondary full" disabled={Boolean(busy)} onClick={() => void createSnapshot()}>{busy === "snapshot" ? <LoaderCircle className="spin" size={14} /> : <DatabaseBackup size={14} />} Snapshotを作成</button>
-          <div className="recovery-list">{snapshots.map((snapshot) => <article key={snapshot.id}><div><strong>{snapshotKindLabel[snapshot.kind]}</strong><span>{formatDateTime(snapshot.createdAt)} · リビジョン {snapshot.revision}</span><code>{snapshot.databaseSha256.slice(0, 14)}…</code></div><button className="button ghost compact" disabled={Boolean(busy)} onClick={() => void restoreSnapshot(snapshot)}>{busy === snapshot.id ? <LoaderCircle className="spin" size={13} /> : <RotateCcw size={13} />} 復元</button></article>)}{!snapshots.length && <p className="empty-row">Snapshotはまだない</p>}</div>
-          <p className="recovery-caveat"><HardDrive size={14} /> 同じ端末内。端末故障には外部Backupが必要</p>
+          <header><div><h3>Snapshot</h3></div></header>
+          <button className="button secondary full" disabled={Boolean(busy)} onClick={() => void createSnapshot()}>{busy === "snapshot" ? "作成中" : "Snapshotを作成"}</button>
+          <div className="recovery-list">{snapshots.map((snapshot) => <article key={snapshot.id}><div><strong>{snapshotKindLabel[snapshot.kind]}</strong><span>{formatDateTime(snapshot.createdAt)} · リビジョン {snapshot.revision}</span><code>{snapshot.databaseSha256.slice(0, 14)}…</code></div><button className="button ghost compact" disabled={Boolean(busy)} onClick={() => void restoreSnapshot(snapshot)}>{busy === snapshot.id ? "復元中" : "復元"}</button></article>)}{!snapshots.length && <p className="empty-row">Snapshotはまだない</p>}</div>
+          <p className="recovery-caveat">同じ端末内。端末故障には外部Backupが必要</p>
         </section>
 
         <section className="recovery-card featured">
-          <header><div className="recovery-icon external"><FileArchive size={18} /></div><div><h3>暗号化Backup</h3></div></header>
+          <header><div><h3>暗号化Backup</h3></div></header>
           <label className="password-label">パスワード<input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="12文字以上" /></label>
-          <div className="dual-actions"><button className="button primary" disabled={Boolean(busy) || password.length < 12} onClick={() => void createBackup()}>{busy === "backup" ? <LoaderCircle className="spin" size={14} /> : <DatabaseBackup size={14} />} 作成</button><button className="button secondary" disabled={Boolean(busy) || password.length < 12} onClick={() => void verifyExternal()}>{busy === "verify" ? <LoaderCircle className="spin" size={14} /> : <CheckCircle2 size={14} />} 検証</button></div>
-          <div className="recovery-list">{backups.map((backup) => <article key={backup.id}><div><strong>{backup.fileName}</strong><span>{formatDateTime(backup.createdAt)} · {formatBytes(backup.byteSize)}</span><code>{backup.archiveSha256.slice(0, 14)}…</code></div><ExternalLink size={14} /></article>)}{!backups.length && <p className="empty-row">Backupはまだない</p>}</div>
+          <div className="dual-actions"><button className="button primary" disabled={Boolean(busy) || password.length < 12} onClick={() => void createBackup()}>{busy === "backup" ? "作成中" : "作成"}</button><button className="button secondary" disabled={Boolean(busy) || password.length < 12} onClick={() => void verifyExternal()}>{busy === "verify" ? "検証中" : "検証"}</button></div>
+          <div className="recovery-list">{backups.map((backup) => <article key={backup.id}><div><strong>{backup.fileName}</strong><span>{formatDateTime(backup.createdAt)} · {formatBytes(backup.byteSize)}</span><code>{backup.archiveSha256.slice(0, 14)}…</code></div></article>)}{!backups.length && <p className="empty-row">Backupはまだない</p>}</div>
         </section>
       </div>
 
       <section className="trash-section">
-        <header><div><Trash2 size={17} /><div><h3>ゴミ箱</h3></div></div><span>{trash.length}</span></header>
-        <div className="trash-list">{trash.map((block) => <article key={block.id}><div><strong>{block.title}</strong><span>{blockKindLabel[block.kind]} · {block.deletedAt ? formatDateTime(block.deletedAt) : "—"}</span><code>{block.id}</code></div><button className="button secondary compact" disabled={Boolean(busy)} onClick={() => void restoreTrash(block)}>{busy === block.id ? <LoaderCircle className="spin" size={13} /> : <ArchiveRestore size={13} />} 復元</button></article>)}{!trash.length && <p className="empty-row">空</p>}</div>
+        <header><div><div><h3>ゴミ箱</h3></div></div><span>{trash.length}</span></header>
+        <div className="trash-list">{trash.map((block) => <article key={block.id}><div><strong>{block.title}</strong><span>{blockKindLabel[block.kind]} · {block.deletedAt ? formatDateTime(block.deletedAt) : "—"}</span><code>{block.id}</code></div><button className="button secondary compact" disabled={Boolean(busy)} onClick={() => void restoreTrash(block)}>{busy === block.id ? "復元中" : "復元"}</button></article>)}{!trash.length && <p className="empty-row">空</p>}</div>
       </section>
     </section>
   );

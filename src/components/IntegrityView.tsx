@@ -1,14 +1,4 @@
 import { useEffect, useState } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  CircleAlert,
-  Database,
-  FileCheck2,
-  LoaderCircle,
-  RefreshCw,
-  ShieldCheck,
-} from "lucide-react";
 import { api } from "../api";
 import { formatDateTime } from "../labels";
 import type { IntegrityFinding, IntegrityReport } from "../types";
@@ -42,37 +32,37 @@ export default function IntegrityView({ onSelectBlock, onError }: Props) {
     <section className="integrity-page">
       <header className="page-header">
         <div><h2>整合性検査</h2></div>
-        <button className="button secondary" disabled={loading} onClick={() => void run()}>{loading ? <LoaderCircle className="spin" size={15} /> : <RefreshCw size={15} />} 検査</button>
+        <button className="button secondary" disabled={loading} onClick={() => void run()}>{loading ? "検査中" : "検査"}</button>
       </header>
 
       {loading && !report ? (
-        <div className="center-message"><LoaderCircle className="spin" size={20} /> 検査中</div>
+        <div className="center-message">検査中</div>
       ) : report && (
         <>
           <div className="integrity-summary">
-            <SummaryCard icon={<ShieldCheck />} value={report.healthyHypotheses} label="正常な仮説" tone="healthy" />
-            <SummaryCard icon={<AlertTriangle />} value={warnings.length} label="警告" tone="warning" />
-            <SummaryCard icon={<CircleAlert />} value={fatals.length} label="重大" tone="fatal" />
-            <SummaryCard icon={<Database />} value={`r${report.vaultRevision}`} label="検査リビジョン" tone="neutral" />
+            <SummaryCard value={report.healthyHypotheses} label="正常な仮説" tone="healthy" />
+            <SummaryCard value={warnings.length} label="警告" tone="warning" />
+            <SummaryCard value={fatals.length} label="重大" tone="fatal" />
+            <SummaryCard value={`r${report.vaultRevision}`} label="検査リビジョン" tone="neutral" />
           </div>
 
           <div className="integrity-groups">
             {fatals.length > 0 && <FindingGroup title="対応が必要" description="原因を確認するまで新しい復旧点を作らない" findings={fatals} onSelectBlock={onSelectBlock} />}
             {warnings.length > 0 && <FindingGroup title="警告" description="研究構造または復旧状態を確認する" findings={warnings} onSelectBlock={onSelectBlock} />}
             {fatals.length === 0 && warnings.length === 0 && (
-              <div className="integrity-clear"><CheckCircle2 size={28} /><div><h3>問題なし</h3></div></div>
+              <div className="integrity-clear"><div><h3>問題なし</h3></div></div>
             )}
           </div>
 
-          <footer className="integrity-footer"><FileCheck2 size={15} /> {formatDateTime(report.checkedAt)}に検査。外部Backupは別に必要</footer>
+          <footer className="integrity-footer">{formatDateTime(report.checkedAt)}に検査。外部Backupは別に必要</footer>
         </>
       )}
     </section>
   );
 }
 
-function SummaryCard({ icon, value, label, tone }: { icon: React.ReactNode; value: number | string; label: string; tone: string }) {
-  return <div className={`summary-card ${tone}`}><span>{icon}</span><strong>{value}</strong><p>{label}</p></div>;
+function SummaryCard({ value, label, tone }: { value: number | string; label: string; tone: string }) {
+  return <div className={`summary-card ${tone}`}><strong>{value}</strong><p>{label}</p></div>;
 }
 
 function FindingGroup({ title, description, findings, onSelectBlock }: { title: string; description: string; findings: IntegrityFinding[]; onSelectBlock: (id: string) => void }) {
@@ -82,7 +72,6 @@ function FindingGroup({ title, description, findings, onSelectBlock }: { title: 
       <div className="finding-list">
         {findings.map((finding, index) => (
           <button key={`${finding.code}-${finding.entityId}-${index}`} onClick={() => finding.entityId && onSelectBlock(finding.entityId)} disabled={!finding.entityId}>
-            {finding.severity === "fatal" ? <CircleAlert size={17} /> : <AlertTriangle size={17} />}
             <div><strong>{finding.message}</strong><code>{finding.code}</code></div>
           </button>
         ))}

@@ -1,7 +1,6 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import {
   Background,
-  Controls,
   Handle,
   MarkerType,
   MiniMap,
@@ -13,7 +12,6 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Filter, Link2, Search, X } from "lucide-react";
 import { api } from "../api";
 import { blockKindLabel, blockStatusLabel, edgeTypeLabel } from "../labels";
 import type { BlockStatus, EdgeType, GraphData, HypothesisBlock } from "../types";
@@ -45,25 +43,25 @@ const edgeTypes: EdgeType[] = [
 const statuses: BlockStatus[] = ["Idea", "Developing", "Testing", "Supported", "Weakly Supported", "Rejected", "Archived"];
 
 const statusColor: Record<BlockStatus, string> = {
-  Idea: "#99a2ad",
-  Developing: "#7b9fc5",
-  Testing: "#d4a94e",
-  Supported: "#69aa86",
-  "Weakly Supported": "#b9a568",
-  Rejected: "#c36b6b",
-  Archived: "#737985",
+  Idea: "var(--status-idea)",
+  Developing: "var(--status-developing)",
+  Testing: "var(--status-testing)",
+  Supported: "var(--status-supported)",
+  "Weakly Supported": "var(--status-weakly-supported)",
+  Rejected: "var(--status-rejected)",
+  Archived: "var(--status-archived)",
 };
 
 const edgeColor: Record<EdgeType, string> = {
-  Supports: "#62a67f",
-  Contradicts: "#c46868",
-  "Depends on": "#8f83c5",
-  "Derived from": "#6999b7",
-  Assumes: "#b28d62",
-  Extends: "#68a2a0",
-  Tests: "#d0a34f",
-  "Alternative to": "#aa78a9",
-  "Related to": "#7f8791",
+  Supports: "var(--edge-supports)",
+  Contradicts: "var(--edge-contradicts)",
+  "Depends on": "var(--edge-depends)",
+  "Derived from": "var(--edge-derived)",
+  Assumes: "var(--edge-assumes)",
+  Extends: "var(--edge-extends)",
+  Tests: "var(--edge-tests)",
+  "Alternative to": "var(--edge-alternative)",
+  "Related to": "var(--edge-related)",
 };
 
 const ResearchNode = memo(({ data, selected }: NodeProps<Node<ResearchNodeData>>) => {
@@ -153,9 +151,9 @@ export default function ResearchGraph({ data, selectedBlockId, onSelectBlock, on
   return (
     <section className="graph-pane" aria-label="研究グラフ">
       <header className="graph-toolbar">
-        <div className="graph-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="グラフを検索" />{query && <button onClick={() => setQuery("")} aria-label="検索を消す"><X size={13} /></button>}</div>
-        <div className="edge-mode"><Link2 size={14} /><span>接続</span><select value={selectedEdgeType} onChange={(event) => setSelectedEdgeType(event.target.value as EdgeType)}>{edgeTypes.map((type) => <option key={type} value={type}>{edgeTypeLabel[type]}</option>)}</select></div>
-        <button className={`button compact ${showFilters ? "active" : "secondary"}`} onClick={() => setShowFilters((value) => !value)}><Filter size={14} /> 絞り込み</button>
+        <div className="graph-search"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="グラフを検索" />{query && <button onClick={() => setQuery("")}>消す</button>}</div>
+        <div className="edge-mode"><span>接続</span><select value={selectedEdgeType} onChange={(event) => setSelectedEdgeType(event.target.value as EdgeType)}>{edgeTypes.map((type) => <option key={type} value={type}>{edgeTypeLabel[type]}</option>)}</select></div>
+        <button className={`button compact ${showFilters ? "active" : "secondary"}`} onClick={() => setShowFilters((value) => !value)}>絞り込み</button>
         <span className="graph-count">{nodes.length} ブロック · {edges.length} 関係</span>
       </header>
       {showFilters && (
@@ -180,7 +178,6 @@ export default function ResearchGraph({ data, selectedBlockId, onSelectBlock, on
           proOptions={{ hideAttribution: true }}
         >
           <Background color="var(--graph-grid)" gap={28} size={1} />
-          <Controls showInteractive={false} />
           <MiniMap nodeColor={(node) => statusColor[(node.data as ResearchNodeData).block.status]} maskColor="var(--minimap-mask)" pannable zoomable />
         </ReactFlow>
       </div>

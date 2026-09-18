@@ -1,22 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { diffWordsWithSpace } from "diff";
-import {
-  Archive,
-  ArrowDownRight,
-  BookMarked,
-  Braces,
-  FilePlus2,
-  GitBranch,
-  History,
-  Link2,
-  LoaderCircle,
-  Plus,
-  RotateCcw,
-  Tags,
-  Trash2,
-  Variable,
-} from "lucide-react";
 import { api } from "../api";
 import {
   attachmentRelationLabel,
@@ -48,13 +32,13 @@ interface Props {
   onError: (message: string) => void;
 }
 
-const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: "relations", label: "関係", icon: <Link2 size={14} /> },
-  { id: "versions", label: "履歴", icon: <History size={14} /> },
-  { id: "files", label: "ファイル", icon: <FilePlus2 size={14} /> },
-  { id: "variables", label: "変数", icon: <Variable size={14} /> },
-  { id: "citations", label: "文献", icon: <BookMarked size={14} /> },
-  { id: "metadata", label: "情報", icon: <Tags size={14} /> },
+const tabs: { id: Tab; label: string }[] = [
+  { id: "relations", label: "関係" },
+  { id: "versions", label: "履歴" },
+  { id: "files", label: "ファイル" },
+  { id: "variables", label: "変数" },
+  { id: "citations", label: "文献" },
+  { id: "metadata", label: "情報" },
 ];
 
 const edgeTypes: EdgeType[] = ["Supports", "Contradicts", "Depends on", "Derived from", "Assumes", "Extends", "Tests", "Alternative to", "Related to"];
@@ -89,15 +73,15 @@ export default function Inspector({ block, graph, onBlockChanged, onDeleted, onG
   useEffect(() => { void reload(); }, [block?.id, block?.currentVersionId]);
 
   if (!block) {
-    return <aside className="inspector empty-inspector"><Link2 size={22} /><p>ブロックを選択</p></aside>;
+    return <aside className="inspector empty-inspector"><p>ブロックを選択</p></aside>;
   }
 
   return (
     <aside className="inspector">
       <div className="inspector-tabs" role="tablist">
-        {tabs.map((item) => <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)} title={item.label} aria-label={item.label}>{item.icon}</button>)}
+        {tabs.map((item) => <button key={item.id} className={tab === item.id ? "active" : ""} onClick={() => setTab(item.id)}>{item.label}</button>)}
       </div>
-      <header className="inspector-header"><h3>{tabs.find((item) => item.id === tab)?.label}</h3>{loading && <LoaderCircle className="spin" size={15} />}</header>
+      <header className="inspector-header"><h3>{tabs.find((item) => item.id === tab)?.label}</h3>{loading && <span>読込中</span>}</header>
       <div className="inspector-content">
         {tab === "relations" && <RelationsPanel block={block} graph={graph} onChanged={onGraphChanged} onError={onError} />}
         {tab === "versions" && <VersionsPanel block={block} versions={versions} onRestored={(restored) => { onBlockChanged(restored); void reload(); }} onError={onError} />}
@@ -124,11 +108,11 @@ function RelationsPanel({ block, graph, onChanged, onError }: { block: Hypothesi
     } catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
   };
   return <div className="panel-stack">
-    <div className="compact-form"><select value={type} onChange={(event) => setType(event.target.value as EdgeType)}>{edgeTypes.map((item) => <option key={item} value={item}>{edgeTypeLabel[item]}</option>)}</select><select value={target} onChange={(event) => setTarget(event.target.value)}><option value="">接続先を選択</option>{graph.blocks.filter((item) => item.id !== block.id).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select><button className="button primary compact" disabled={!target} onClick={() => void add()}><Plus size={13} /> 追加</button></div>
+    <div className="compact-form"><select value={type} onChange={(event) => setType(event.target.value as EdgeType)}>{edgeTypes.map((item) => <option key={item} value={item}>{edgeTypeLabel[item]}</option>)}</select><select value={target} onChange={(event) => setTarget(event.target.value)}><option value="">接続先を選択</option>{graph.blocks.filter((item) => item.id !== block.id).map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select><button className="button primary compact" disabled={!target} onClick={() => void add()}>追加</button></div>
     <div className="inspector-list">{relations.map((edge) => {
       const outgoing = edge.sourceBlockId === block.id;
       const other = outgoing ? edge.targetBlockId : edge.sourceBlockId;
-      return <div className="relation-row" key={edge.id}><ArrowDownRight className={outgoing ? "" : "incoming"} size={15} /><div><strong>{edgeTypeLabel[edge.edgeType]}</strong><span>{outgoing ? "→" : "←"} {names.get(other) ?? other.slice(0, 8)}</span></div><button className="icon-button danger" title="関係を削除" onClick={() => void api.softDeleteEdge(edge.id).then(onChanged).catch((cause) => onError(String(cause)))}><Trash2 size={13} /></button></div>;
+      return <div className="relation-row" key={edge.id}><div><strong>{edgeTypeLabel[edge.edgeType]}</strong><span>{outgoing ? "→" : "←"} {names.get(other) ?? other.slice(0, 8)}</span></div><button className="text-button danger" onClick={() => void api.softDeleteEdge(edge.id).then(onChanged).catch((cause) => onError(String(cause)))}>削除</button></div>;
     })}{!relations.length && <Empty text="関係はまだない" />}</div>
   </div>;
 }
@@ -144,7 +128,7 @@ function VersionsPanel({ block, versions, onRestored, onError }: { block: Hypoth
   return <div className="version-list">{versions.map((version, index) => {
     const previous = versions[index + 1];
     const changes = previous ? diffWordsWithSpace(previous.snapshot.bodyMarkdown, version.snapshot.bodyMarkdown) : [];
-    return <article className="version-card" key={version.id}><button className="version-main" onClick={() => setExpanded((value) => value === version.id ? null : version.id)}><span className="version-label">{version.versionLabel}</span><div><strong>{version.changeReason}</strong><time>{formatDateTime(version.createdAt)}</time></div>{version.id === block.currentVersionId && <i>現在</i>}</button>{expanded === version.id && <div className="version-detail"><code>{version.contentSha256.slice(0, 16)}…</code>{previous ? <div className="word-diff">{changes.map((part, partIndex) => <span className={part.added ? "added" : part.removed ? "removed" : ""} key={partIndex}>{part.value}</span>)}</div> : <p>最初の版</p>}<button className="button secondary compact" disabled={version.id === block.currentVersionId} onClick={() => void restore(version)}><RotateCcw size={13} /> この版を復元</button></div>}</article>;
+    return <article className="version-card" key={version.id}><button className="version-main" onClick={() => setExpanded((value) => value === version.id ? null : version.id)}><span className="version-label">{version.versionLabel}</span><div><strong>{version.changeReason}</strong><time>{formatDateTime(version.createdAt)}</time></div>{version.id === block.currentVersionId && <i>現在</i>}</button>{expanded === version.id && <div className="version-detail"><code>{version.contentSha256.slice(0, 16)}…</code>{previous ? <div className="word-diff">{changes.map((part, partIndex) => <span className={part.added ? "added" : part.removed ? "removed" : ""} key={partIndex}>{part.value}</span>)}</div> : <p>最初の版</p>}<button className="button secondary compact" disabled={version.id === block.currentVersionId} onClick={() => void restore(version)}>この版を復元</button></div>}</article>;
   })}</div>;
 }
 
@@ -156,7 +140,7 @@ function FilesPanel({ block, files, onChanged, onError }: { block: HypothesisBlo
     try { await api.attachFile(block.id, selected, relation); onChanged(); }
     catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
   };
-  return <div className="panel-stack"><div className="inline-form"><select value={relation} onChange={(event) => setRelation(event.target.value as AttachmentRelation)}>{fileRelations.map((item) => <option key={item} value={item}>{attachmentRelationLabel[item]}</option>)}</select><button className="button primary compact" onClick={() => void attach()}><FilePlus2 size={13} /> 添付</button></div><div className="inspector-list">{files.map((file) => <div className="file-row" key={file.id}><span className="file-icon">{file.mediaType === "application/pdf" ? "PDF" : file.displayName.split(".").pop()?.toUpperCase().slice(0, 4)}</span><div><strong>{file.displayName}</strong><span>{attachmentRelationLabel[file.relationType]} · {formatBytes(file.byteSize)}</span><code>{file.objectHash.slice(0, 12)}…</code></div></div>)}{!files.length && <Empty text="添付ファイルはない" />}</div></div>;
+  return <div className="panel-stack"><div className="inline-form"><select value={relation} onChange={(event) => setRelation(event.target.value as AttachmentRelation)}>{fileRelations.map((item) => <option key={item} value={item}>{attachmentRelationLabel[item]}</option>)}</select><button className="button primary compact" onClick={() => void attach()}>添付</button></div><div className="inspector-list">{files.map((file) => <div className="file-row" key={file.id}><div><strong>{file.displayName}</strong><span>{attachmentRelationLabel[file.relationType]} · {formatBytes(file.byteSize)}</span><code>{file.objectHash.slice(0, 12)}…</code></div></div>)}{!files.length && <Empty text="添付ファイルはない" />}</div></div>;
 }
 
 function VariablesPanel({ block, variables, onChanged, onError }: { block: HypothesisBlock; variables: VariableRecord[]; onChanged: () => void; onError: (message: string) => void }) {
@@ -169,7 +153,7 @@ function VariablesPanel({ block, variables, onChanged, onError }: { block: Hypot
     try { await api.registerVariable(symbol, definition, block.id, formula); setSymbol(""); setDefinition(""); setFormula(""); onChanged(); }
     catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
   };
-  return <div className="panel-stack"><div className="compact-form variable-form"><input value={symbol} onChange={(event) => setSymbol(event.target.value)} placeholder="μ" aria-label="変数記号" /><input value={definition} onChange={(event) => setDefinition(event.target.value)} placeholder="定義" /><input value={formula} onChange={(event) => setFormula(event.target.value)} placeholder="μ(a,t)" /><button className="button primary compact" disabled={!symbol.trim() || !definition.trim()} onClick={() => void add()}><Plus size={13} /> 登録</button></div><div className="inspector-list">{relevant.map((variable) => <div className={`variable-row ${variable.hasConflict ? "conflict" : ""}`} key={variable.id}><Braces size={16} /><div><strong>{variable.symbol}</strong>{variable.definitions.filter((item) => item.blockId === block.id).map((item) => <span key={item.id}>{item.definition}{item.formula && ` · ${item.formula}`}</span>)}{variable.hasConflict && <em>別ブロックの定義と競合</em>}</div></div>)}{!relevant.length && <Empty text="変数は未登録" />}</div></div>;
+  return <div className="panel-stack"><div className="compact-form variable-form"><input value={symbol} onChange={(event) => setSymbol(event.target.value)} placeholder="μ" aria-label="変数記号" /><input value={definition} onChange={(event) => setDefinition(event.target.value)} placeholder="定義" /><input value={formula} onChange={(event) => setFormula(event.target.value)} placeholder="μ(a,t)" /><button className="button primary compact" disabled={!symbol.trim() || !definition.trim()} onClick={() => void add()}>登録</button></div><div className="inspector-list">{relevant.map((variable) => <div className={`variable-row ${variable.hasConflict ? "conflict" : ""}`} key={variable.id}><div><strong>{variable.symbol}</strong>{variable.definitions.filter((item) => item.blockId === block.id).map((item) => <span key={item.id}>{item.definition}{item.formula && ` · ${item.formula}`}</span>)}{variable.hasConflict && <em>別ブロックの定義と競合</em>}</div></div>)}{!relevant.length && <Empty text="変数は未登録" />}</div></div>;
 }
 
 function CitationsPanel({ block, citations, onChanged, onError }: { block: HypothesisBlock; citations: BlockCitationRecord[]; onChanged: () => void; onError: (message: string) => void }) {
@@ -183,7 +167,7 @@ function CitationsPanel({ block, citations, onChanged, onError }: { block: Hypot
       setKey(""); setTitle(""); setDoi(""); onChanged();
     } catch (cause) { onError(cause instanceof Error ? cause.message : String(cause)); }
   };
-  return <div className="panel-stack"><div className="compact-form"><input value={key} onChange={(event) => setKey(event.target.value)} placeholder="引用キー" /><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="文献名" /><input value={doi} onChange={(event) => setDoi(event.target.value)} placeholder="DOI（任意）" /><button className="button primary compact" disabled={!key.trim() || !title.trim()} onClick={() => void add()}><Plus size={13} /> 登録</button></div><div className="inspector-list">{citations.map((link) => <div className="citation-row" key={link.linkId}><BookMarked size={15} /><div><strong>[{link.citation.citationKey}] {link.citation.title}</strong><span>{[link.citation.authors, link.citation.year, link.citation.doi].filter(Boolean).join(" · ")}</span>{link.quoteText && <q>{link.quoteText}</q>}</div></div>)}{!citations.length && <Empty text="文献は未登録" />}</div></div>;
+  return <div className="panel-stack"><div className="compact-form"><input value={key} onChange={(event) => setKey(event.target.value)} placeholder="引用キー" /><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="文献名" /><input value={doi} onChange={(event) => setDoi(event.target.value)} placeholder="DOI（任意）" /><button className="button primary compact" disabled={!key.trim() || !title.trim()} onClick={() => void add()}>登録</button></div><div className="inspector-list">{citations.map((link) => <div className="citation-row" key={link.linkId}><div><strong>[{link.citation.citationKey}] {link.citation.title}</strong><span>{[link.citation.authors, link.citation.year, link.citation.doi].filter(Boolean).join(" · ")}</span>{link.quoteText && <q>{link.quoteText}</q>}</div></div>)}{!citations.length && <Empty text="文献は未登録" />}</div></div>;
 }
 
 function MetadataPanel({ block, onBlockChanged, onDeleted, onError }: { block: HypothesisBlock; onBlockChanged: (block: HypothesisBlock) => void; onDeleted: (id: string) => void; onError: (message: string) => void }) {
@@ -207,7 +191,7 @@ function MetadataPanel({ block, onBlockChanged, onDeleted, onError }: { block: H
     ["作成", formatDateTime(block.createdAt)], ["更新", formatDateTime(block.updatedAt)],
     ["親ブロック", block.parentBlockId ?? "—"],
   ];
-  return <div className="panel-stack"><dl className="metadata-list">{fields.map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl><button className="button secondary full" onClick={() => void branch()}><GitBranch size={14} /> 現在の版から分岐</button><button className="button danger-outline full" onClick={() => setDeleteOpen(true)}><Archive size={14} /> ゴミ箱へ移動</button>{deleteOpen && <div className="danger-zone"><strong>ゴミ箱へ移動する？</strong><p>履歴は残り、あとで復元できる</p><label><b>{block.title}</b>と入力<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label><div className="inline-actions"><button className="button ghost compact" onClick={() => { setDeleteOpen(false); setConfirmation(""); }}>キャンセル</button><button className="button danger compact" disabled={confirmation !== block.title} onClick={() => void remove()}><Trash2 size={13} /> 移動</button></div></div>}</div>;
+  return <div className="panel-stack"><dl className="metadata-list">{fields.map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl><button className="button secondary full" onClick={() => void branch()}>現在の版から分岐</button><button className="button danger-outline full" onClick={() => setDeleteOpen(true)}>ゴミ箱へ移動</button>{deleteOpen && <div className="danger-zone"><strong>ゴミ箱へ移動する？</strong><p>履歴は残り、あとで復元できる</p><label><b>{block.title}</b>と入力<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label><div className="inline-actions"><button className="button ghost compact" onClick={() => { setDeleteOpen(false); setConfirmation(""); }}>キャンセル</button><button className="button danger compact" disabled={confirmation !== block.title} onClick={() => void remove()}>移動</button></div></div>}</div>;
 }
 
 function Empty({ text }: { text: string }) { return <p className="empty-row">{text}</p>; }

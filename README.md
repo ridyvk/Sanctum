@@ -35,6 +35,10 @@ The browser-only Vite target is for UI development and explicitly reports that d
 
 Version 0.3.0 is the one-time updater bootstrap release. After installing it, Sanctum checks the signed GitHub Release feed only while the Home screen is open. An available update can be downloaded and installed from the version control at the bottom of Home. Updating is intentionally unavailable while a Vault is open, so it cannot restart the process during an edit or save.
 
+## 0.3.1 monochrome reading UI
+
+Version 0.3.1 removes on-screen image icons in favor of short text labels, reduces the Home wordmark, uses a compact Mincho stack for Japanese, and makes the light theme strictly monochrome with black as its accent.
+
 Updater packages and `latest.json` are signed in CI with a repository secret. The app contains only the public verification key. See [updater release setup](docs/UPDATER_RELEASE.md).
 
 ## 0.2.0 editor and UI fix

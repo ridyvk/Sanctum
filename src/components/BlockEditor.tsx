@@ -1,16 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  Check,
-  Columns2,
-  Eye,
-  FileText,
-  FunctionSquare,
-  LoaderCircle,
-  Quote,
-  Redo2,
-  RotateCcw,
-} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
@@ -212,7 +200,7 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
     <section className="editor-pane" aria-label="ブロック編集">
       {recoveryPending && (
         <div className="recovery-banner" role="alert">
-          <div><RotateCcw size={18} /><span><strong>未保存の編集が見つかった</strong> · {formatDateTime(recovery!.updatedAt)}</span></div>
+          <div><span><strong>未保存の編集が見つかった</strong> · {formatDateTime(recovery!.updatedAt)}</span></div>
           <div className="inline-actions"><button className="button secondary" onClick={() => void discardRecovery()}>破棄</button><button className="button primary" onClick={() => void acceptRecovery()}>復元して保存</button></div>
         </div>
       )}
@@ -227,9 +215,9 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
         <div className="editor-header-actions">
           <SaveIndicator state={saveState} />
           <div className="segmented" aria-label="表示切替">
-            <button className={viewMode === "editor" ? "active" : ""} onClick={() => setViewMode("editor")} title="編集"><FileText size={15} /></button>
-            <button className={viewMode === "split" ? "active" : ""} onClick={() => setViewMode("split")} title="分割"><Columns2 size={15} /></button>
-            <button className={viewMode === "preview" ? "active" : ""} onClick={() => setViewMode("preview")} title="プレビュー"><Eye size={15} /></button>
+            <button className={viewMode === "editor" ? "active" : ""} onClick={() => setViewMode("editor")}>編集</button>
+            <button className={viewMode === "split" ? "active" : ""} onClick={() => setViewMode("split")}>分割</button>
+            <button className={viewMode === "preview" ? "active" : ""} onClick={() => setViewMode("preview")}>表示</button>
           </div>
         </div>
       </header>
@@ -253,16 +241,16 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
       <div className="markdown-toolbar" aria-label="Markdownツール">
         <button onClick={() => insertMarkdown("**", "**")} title="太字"><strong>B</strong></button>
         <button onClick={() => insertMarkdown("_", "_")} title="斜体"><em>I</em></button>
-        <button onClick={() => insertMarkdown("$", "$")} title="行内数式"><FunctionSquare size={15} /></button>
+        <button onClick={() => insertMarkdown("$", "$")} title="行内数式">数式</button>
         <button onClick={() => insertMarkdown("\n$$\n", "\n$$\n")} title="別行数式">∑</button>
         <button onClick={() => insertMarkdown("\n```python\n", "\n```\n")} title="コードブロック">{`</>`}</button>
-        <button onClick={() => insertMarkdown("\n> ")} title="引用"><Quote size={15} /></button>
+        <button onClick={() => insertMarkdown("\n> ")} title="引用">引用</button>
         <button onClick={() => insertMarkdown("\n- [ ] ")} title="タスク">☐</button>
         <button onClick={() => insertMarkdown("[^1]", "\n\n[^1]: ")} title="脚注">¹</button>
         <button onClick={() => insertMarkdown("[@", "]")} title="文献引用">@</button>
         <span className="toolbar-spacer" />
-        <button title="元に戻す" onClick={() => document.execCommand("undo")}><RotateCcw size={14} /></button>
-        <button title="やり直す" onClick={() => document.execCommand("redo")}><Redo2 size={14} /></button>
+        <button title="元に戻す" onClick={() => document.execCommand("undo")}>戻す</button>
+        <button title="やり直す" onClick={() => document.execCommand("redo")}>進む</button>
       </div>
 
       <div className={`editor-workspace view-${viewMode}`}>
@@ -295,13 +283,13 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
 }
 
 function SaveIndicator({ state }: { state: SaveState }) {
-  const content: Record<SaveState, { icon: React.ReactNode; label: string }> = {
-    saved: { icon: <Check size={14} />, label: "保存済み" },
-    dirty: { icon: <span className="save-dot" />, label: "編集中" },
-    saving: { icon: <LoaderCircle className="spin" size={14} />, label: "保存中" },
-    conflict: { icon: <AlertTriangle size={14} />, label: "編集が競合" },
-    error: { icon: <AlertTriangle size={14} />, label: "保存失敗" },
-    recovered: { icon: <RotateCcw size={14} />, label: "復旧データあり" },
+  const content: Record<SaveState, string> = {
+    saved: "保存済み",
+    dirty: "編集中",
+    saving: "保存中",
+    conflict: "編集が競合",
+    error: "保存失敗",
+    recovered: "復旧データあり",
   };
-  return <span className={`save-state save-${state}`}>{content[state].icon}{content[state].label}</span>;
+  return <span className={`save-state save-${state}`}>{content[state]}</span>;
 }

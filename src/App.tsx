@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Moon, Sun } from "lucide-react";
 import { api } from "./api";
 import Home from "./components/Home";
 import { rememberVault } from "./recentVaults";
@@ -33,11 +32,11 @@ export default function App() {
   return (
     <div className="app-shell">
       <button
-        className="theme-toggle icon-button"
+        className="theme-toggle text-button"
         aria-label={theme === "dark" ? "ライトモードに切替" : "ダークモードに切替"}
         onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
       >
-        {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+        {theme === "dark" ? "白" : "黒"}
       </button>
       {vault ? (
         <Suspense fallback={<div className="center-message">研究を開いている</div>}>

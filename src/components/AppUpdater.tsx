@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { Download, LoaderCircle, RefreshCw } from "lucide-react";
 
 interface Props {
   desktop: boolean;
@@ -98,13 +97,12 @@ export default function AppUpdater({ desktop, autoCheck = true, onInstallStateCh
       <span>{version ? `v${version}` : "Sanctum"}</span>
       {phase === "available" ? (
         <button type="button" onClick={() => void install()}>
-          <Download size={13} /> v{availableVersion}へ更新
+          v{availableVersion}へ更新
         </button>
       ) : phase === "downloading" ? (
-        <span className="update-progress"><LoaderCircle className="spin" size={13} /> 更新中{percent === null ? "" : ` ${percent}%`}</span>
+        <span className="update-progress">更新中{percent === null ? "" : ` ${percent}%`}</span>
       ) : (
         <button type="button" disabled={phase === "checking"} onClick={() => void checkNow(true)}>
-          {phase === "checking" ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}
           {phase === "checking" ? "確認中" : phase === "current" ? "最新版" : "更新を確認"}
         </button>
       )}

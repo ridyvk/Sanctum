@@ -2942,7 +2942,7 @@ dependencies = [
 
 [[package]]
 name = "sanctum-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "argon2",
  "chacha20poly1305",
@@ -2966,7 +2966,7 @@ dependencies = [
 
 [[package]]
 name = "sanctum-desktop"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "sanctum-core",
  "serde",

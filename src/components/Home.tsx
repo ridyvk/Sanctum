@@ -1,14 +1,5 @@
 import { useMemo, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import {
-  ArchiveRestore,
-  ArrowUpRight,
-  BookOpenText,
-  FolderOpen,
-  Plus,
-  ShieldCheck,
-  X,
-} from "lucide-react";
 import { api, isDesktopRuntime } from "../api";
 import { formatDate } from "../labels";
 import { loadRecentVaults, rememberVault, type RecentVault } from "../recentVaults";
@@ -108,13 +99,11 @@ export default function Home({ onOpened }: Props) {
   return (
     <main className="home">
       <header className="home-hero">
-        <div className="brand-mark" aria-hidden="true"><BookOpenText size={22} /></div>
         <h1>SANCTUM</h1>
       </header>
 
       {!desktop && (
         <div className="runtime-notice" role="status">
-          <ShieldCheck size={18} />
           <div>
             <strong>ブラウザ表示</strong>
             <span>保存機能はデスクトップ版でのみ利用できる</span>
@@ -129,10 +118,10 @@ export default function Home({ onOpened }: Props) {
           </div>
           <div className="home-actions">
             <button className="button secondary" disabled={!desktop || busy || updating} onClick={() => void openPath()}>
-              <FolderOpen size={16} /> Vaultを開く
+              Vaultを開く
             </button>
             <button className="button primary" disabled={!desktop || busy || updating} onClick={() => { setError(null); setModal("new"); }}>
-              <Plus size={16} /> 新規作成
+              新規作成
             </button>
           </div>
         </div>
@@ -145,7 +134,6 @@ export default function Home({ onOpened }: Props) {
               <button className="project-card" key={`${project.vaultId}-${project.path}`} onClick={() => void openPath(project.path)} disabled={!desktop || busy || updating}>
                 <div className="project-card-top">
                   <span className={`project-index tone-${index % 4}`}>{String(index + 1).padStart(2, "0")}</span>
-                  <ArrowUpRight size={18} />
                 </div>
                 <h3>{project.name}</h3>
                 <p>{project.path}</p>
@@ -155,14 +143,13 @@ export default function Home({ onOpened }: Props) {
           </div>
         ) : (
           <div className="empty-projects">
-            <div className="empty-orbit" aria-hidden="true"><span /></div>
             <h3>研究はまだない</h3>
           </div>
         )}
 
         <div className="home-footer">
           <button className="restore-link" disabled={!desktop || busy || updating} onClick={() => { setError(null); setModal("restore"); }}>
-            <ArchiveRestore size={15} /> 暗号化Backupから復元
+            暗号化Backupから復元
           </button>
           <AppUpdater desktop={desktop} onInstallStateChange={setUpdating} />
         </div>
@@ -171,7 +158,7 @@ export default function Home({ onOpened }: Props) {
       {modal && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}>
           <section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-            <button className="icon-button modal-close" aria-label="閉じる" onClick={() => setModal(null)}><X size={17} /></button>
+            <button className="text-button modal-close" onClick={() => setModal(null)}>閉じる</button>
             {modal === "new" ? (
               <>
                 <h2 id="modal-title">新しいSanctum</h2>

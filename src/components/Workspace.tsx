@@ -1,19 +1,4 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Activity,
-  ArrowLeft,
-  BookOpenText,
-  ChevronDown,
-  CircleDot,
-  FileClock,
-  GitFork,
-  LoaderCircle,
-  Network,
-  Plus,
-  Search,
-  ShieldCheck,
-  X,
-} from "lucide-react";
 import { api } from "../api";
 import { blockFingerprint } from "../blockSnapshot";
 import { blockKindLabel, blockStatusLabel } from "../labels";
@@ -158,33 +143,33 @@ export default function Workspace({ vault, onClose }: Props) {
   return (
     <main className="workspace">
       <header className="workspace-topbar">
-        <div className="workspace-brand"><button className="icon-button" onClick={() => void onClose()} aria-label="研究一覧へ戻る"><ArrowLeft size={17} /></button><div className="small-brand"><BookOpenText size={17} /></div><div><strong>{currentVault.name}</strong><span>リビジョン {currentVault.revision}</span></div></div>
-        <div className="global-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="タイトル・本文・LaTeX・変数・文献を検索" />{query && <button onClick={() => setQuery("")} aria-label="検索を消す"><X size={14} /></button>}{searchHits.length > 0 && <div className="search-results">{searchHits.map((hit) => <button key={hit.blockId} onClick={() => void selectBlock(hit.blockId)}><strong>{hit.title}</strong><span>{hit.excerpt}</span></button>)}</div>}</div>
-        <div className="topbar-safety"><ShieldCheck size={15} /><span>ローカル保存</span></div>
+        <div className="workspace-brand"><button className="text-button" onClick={() => void onClose()}>戻る</button><div><strong>{currentVault.name}</strong><span>リビジョン {currentVault.revision}</span></div></div>
+        <div className="global-search"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="タイトル・本文・LaTeX・変数・文献を検索" />{query && <button onClick={() => setQuery("")}>消す</button>}{searchHits.length > 0 && <div className="search-results">{searchHits.map((hit) => <button key={hit.blockId} onClick={() => void selectBlock(hit.blockId)}><strong>{hit.title}</strong><span>{hit.excerpt}</span></button>)}</div>}</div>
+        <div className="topbar-safety"><span>ローカル保存</span></div>
       </header>
 
       <div className="workspace-grid">
         <aside className="navigator">
           <div className="navigator-tabs">
-            <button className={view === "editor" ? "active" : ""} onClick={() => setView("editor")}><CircleDot size={15} /> ブロック</button>
-            <button className={view === "graph" ? "active" : ""} onClick={() => setView("graph")}><Network size={15} /> グラフ</button>
-            <button className={view === "integrity" ? "active" : ""} onClick={() => setView("integrity")}><Activity size={15} /> 検査</button>
-            <button className={view === "recovery" ? "active" : ""} onClick={() => setView("recovery")}><FileClock size={15} /> 復旧</button>
+            <button className={view === "editor" ? "active" : ""} onClick={() => setView("editor")}>ブロック</button>
+            <button className={view === "graph" ? "active" : ""} onClick={() => setView("graph")}>グラフ</button>
+            <button className={view === "integrity" ? "active" : ""} onClick={() => setView("integrity")}>検査</button>
+            <button className={view === "recovery" ? "active" : ""} onClick={() => setView("recovery")}>復旧</button>
           </div>
 
-          <div className="navigator-heading"><div><strong>ブロック</strong><span>{blocks.length}</span></div><button className="icon-button primary-icon" disabled={creating} onClick={() => void createBlock()} aria-label="ブロックを作成">{creating ? <LoaderCircle className="spin" size={15} /> : <Plus size={16} />}</button></div>
-          <label className="filter-select"><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">すべての状態</option>{(["Idea", "Developing", "Testing", "Supported", "Weakly Supported", "Rejected", "Archived"] as const).map((status) => <option key={status} value={status}>{blockStatusLabel[status]}</option>)}</select><ChevronDown size={13} /></label>
+          <div className="navigator-heading"><div><strong>ブロック</strong><span>{blocks.length}</span></div><button className="text-button" disabled={creating} onClick={() => void createBlock()}>{creating ? "作成中" : "追加"}</button></div>
+          <label className="filter-select"><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">すべての状態</option>{(["Idea", "Developing", "Testing", "Supported", "Weakly Supported", "Rejected", "Archived"] as const).map((status) => <option key={status} value={status}>{blockStatusLabel[status]}</option>)}</select></label>
 
           <nav className="block-list" aria-label="仮説ブロック">
-            {filteredBlocks.map((block) => <button key={block.id} className={selected?.id === block.id ? "active" : ""} onClick={() => void selectBlock(block.id)}><span className={`status-dot status-${block.status.toLowerCase().replaceAll(" ", "-")}`} /><div><strong>{block.title}</strong><span>{blockKindLabel[block.kind]} · {block.id.slice(0, 8).toUpperCase()}</span></div>{block.parentBlockId && <GitFork size={13} />}</button>)}
+            {filteredBlocks.map((block) => <button key={block.id} className={selected?.id === block.id ? "active" : ""} onClick={() => void selectBlock(block.id)}><span className={`status-dot status-${block.status.toLowerCase().replaceAll(" ", "-")}`} /><div><strong>{block.title}</strong><span>{blockKindLabel[block.kind]} · {block.id.slice(0, 8).toUpperCase()}{block.parentBlockId ? " · 分岐" : ""}</span></div></button>)}
             {!loading && !filteredBlocks.length && <div className="navigator-empty"><p>表示するブロックがない</p><button onClick={() => void createBlock()}>仮説を作成</button></div>}
           </nav>
-          <footer className="navigator-footer"><ShieldCheck size={12} /> 自動保存</footer>
+          <footer className="navigator-footer">自動保存</footer>
         </aside>
 
         <section className="main-stage">
-          {loading ? <div className="center-message"><LoaderCircle className="spin" size={20} /> Vaultを開いている</div> : (
-            <Suspense fallback={<div className="center-message"><LoaderCircle className="spin" size={20} /> 読み込み中</div>}>
+          {loading ? <div className="center-message">Vaultを開いている</div> : (
+            <Suspense fallback={<div className="center-message">読み込み中</div>}>
               {view === "editor" && (selected ? <BlockEditor key={selected.id} block={selected} recovery={recovery} onSaved={handleSaved} onRecoveryResolved={() => setRecovery(null)} onError={showError} /> : <WelcomeEmpty onCreate={() => void createBlock()} />)}
               {view === "graph" && <ResearchGraph data={graph} selectedBlockId={selected?.id ?? null} onSelectBlock={(id) => void selectBlock(id, false)} onRefresh={refreshGraph} onError={showError} />}
               {view === "integrity" && <IntegrityView onSelectBlock={(id) => void selectBlock(id)} onError={showError} />}
@@ -196,11 +181,11 @@ export default function Workspace({ vault, onClose }: Props) {
         <Inspector block={selected} graph={graph} onBlockChanged={(block) => void handleBlockChanged(block)} onDeleted={(id) => void handleDeleted(id)} onGraphChanged={async () => { await refreshGraph(); }} onError={showError} />
       </div>
 
-      {message && <div className={`toast ${message.tone}`} role={message.tone === "error" ? "alert" : "status"}><span>{message.text}</span><button className="icon-button" onClick={() => setMessage(null)}><X size={14} /></button></div>}
+      {message && <div className={`toast ${message.tone}`} role={message.tone === "error" ? "alert" : "status"}><span>{message.text}</span><button className="text-button" onClick={() => setMessage(null)}>閉じる</button></div>}
     </main>
   );
 }
 
 function WelcomeEmpty({ onCreate }: { onCreate: () => void }) {
-  return <div className="workspace-empty"><h2>最初の仮説を作成</h2><button className="button primary" onClick={onCreate}><Plus size={16} /> 仮説を作成</button></div>;
+  return <div className="workspace-empty"><h2>最初の仮説を作成</h2><button className="button primary" onClick={onCreate}>仮説を作成</button></div>;
 }
