@@ -12,4 +12,13 @@ describe("UI typography", () => {
     expect(styles).not.toContain('font-feature-settings: "palt"');
     expect(styles).toContain("letter-spacing: normal;");
   });
+
+  it("keeps secondary text high-contrast in both themes", () => {
+    expect(styles).toContain("--text: #ffffff;");
+    expect(styles).toContain("--text-soft: #d0d0d0;");
+    expect(styles).toContain("--text-faint: #9a9a9a;");
+    expect(styles).toMatch(
+      /:root\[data-theme="light"\][\s\S]*--text: #000000;[\s\S]*--text-soft: #242424;[\s\S]*--text-faint: #565656;/,
+    );
+  });
 });

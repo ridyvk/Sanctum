@@ -31,6 +31,10 @@ The native Windows installer is built and signed for the in-app updater on a Win
 
 The browser-only Vite target is for UI development and explicitly reports that durable Vault operations require the Tauri runtime. It must never claim that research data was saved.
 
+## 0.4.1 text contrast
+
+Version 0.4.1 keeps the existing type sizes and lightweight Japanese typography while increasing secondary and faint text contrast in both dark and light themes.
+
 ## 0.4.0 data portability and daily backup
 
 Version 0.4.0 adds a portable export folder containing Markdown, original attachments, BibTeX/JSON citations, graph relations, variables, and a SHA-256 manifest. Optional daily encrypted backups reuse the verified backup pipeline; the password is stored only in Windows Credential Manager. Attachments support multi-select and native drag-and-drop, image preview, default-application opening, deletion, and filename search. Citations can be imported from DOI/Crossref or multi-entry BibTeX. The everyday UI now keeps integrity, branch, metadata, legacy statuses, and recovery details behind explicit detail controls without changing existing Vault data.

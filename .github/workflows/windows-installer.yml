@@ -39,7 +39,7 @@ jobs:
             SanctumのWindows版。既存のVaultはそのまま引き継がれる。
 
             v0.3.0以降はSanctumのホーム画面から次の更新を確認・適用できる。
-            v0.4.0では完全エクスポート、自動暗号化Backup、添付のドラッグ＆ドロップ・画像表示・外部アプリ起動、DOI・BibTeX取込、簡潔な通常画面を追加した。
+            v0.4.1では文字サイズと細い書体を維持したまま、ダーク・ライト両テーマの文字コントラストを改善した。
           releaseDraft: false
           prerelease: false
           args: --bundles nsis
