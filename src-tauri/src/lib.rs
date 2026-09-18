@@ -626,7 +626,7 @@ fn open_with_default_application(path: &std::path::Path) -> std::io::Result<()> 
         .collect::<Vec<_>>();
     let result = unsafe {
         ShellExecuteW(
-            0,
+            ptr::null_mut(),
             operation.as_ptr(),
             file.as_ptr(),
             ptr::null(),
