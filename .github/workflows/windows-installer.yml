@@ -39,7 +39,7 @@ jobs:
             SanctumのWindows版。既存のVaultはそのまま引き継がれる。
 
             v0.3.0以降はSanctumのホーム画面から次の更新を確認・適用できる。
-            v0.4.3では自動更新後にWindowsのショートカットを作り直し、アイコン表示の再読込を通知する。
+            v0.4.4では白いタイルを使わず、黒いSanctumロゴを透過背景のアプリアイコンとして表示する。
           releaseDraft: false
           prerelease: false
           args: --bundles nsis

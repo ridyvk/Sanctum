@@ -15,7 +15,7 @@ vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: mocks.relaunch }));
 describe("AppUpdater", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getVersion.mockResolvedValue("0.4.3");
+    mocks.getVersion.mockResolvedValue("0.4.4");
     mocks.relaunch.mockResolvedValue(undefined);
   });
 
@@ -23,7 +23,7 @@ describe("AppUpdater", () => {
     mocks.check.mockResolvedValue(null);
     render(<AppUpdater desktop autoCheck={false} />);
 
-    expect(await screen.findByText("v0.4.3")).toBeInTheDocument();
+    expect(await screen.findByText("v0.4.4")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "更新を確認" }));
 
     expect(await screen.findByRole("button", { name: "最新版" })).toBeInTheDocument();
@@ -32,7 +32,7 @@ describe("AppUpdater", () => {
 
   it("downloads an available update and relaunches", async () => {
     const update = {
-      version: "0.4.4",
+      version: "0.4.5",
       close: vi.fn().mockResolvedValue(undefined),
       downloadAndInstall: vi.fn(async (onEvent: (event: unknown) => void) => {
         onEvent({ event: "Started", data: { contentLength: 100 } });
@@ -44,7 +44,7 @@ describe("AppUpdater", () => {
     render(<AppUpdater desktop autoCheck={false} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "更新を確認" }));
-    fireEvent.click(await screen.findByRole("button", { name: "v0.4.4へ更新" }));
+    fireEvent.click(await screen.findByRole("button", { name: "v0.4.5へ更新" }));
 
     await waitFor(() => expect(update.downloadAndInstall).toHaveBeenCalledOnce());
     await waitFor(() => expect(mocks.relaunch).toHaveBeenCalledOnce());
