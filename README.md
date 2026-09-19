@@ -31,6 +31,10 @@ The native Windows installer is built and signed for the in-app updater on a Win
 
 The browser-only Vite target is for UI development and explicitly reports that durable Vault operations require the Tauri runtime. It must never claim that research data was saved.
 
+## 0.4.5 opaque application icon
+
+Version 0.4.5 keeps the supplied Sanctum mark and its 0.4.4 placement unchanged while replacing transparency with a solid white square background. The opaque artwork is bundled into the Windows executable, installer, Start menu shortcut, desktop shortcut, and taskbar icon; no image is added inside the application UI.
+
 ## 0.4.4 transparent application icon
 
 Version 0.4.4 replaces the white icon tile with the supplied two-orbit Sanctum mark on a genuinely transparent background. The transparent artwork is bundled into the Windows executable, installer, Start menu shortcut, desktop shortcut, and taskbar icon; no image is added inside the application UI.
