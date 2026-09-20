@@ -206,4 +206,4 @@ Workspace は左 navigation、中央 editor/graph/data、右 inspector。通常�
 10. Home / editor / graph / inspector / recovery UI
 11. crash、migration、history、snapshot、backup、tamper tests
 
-AI、cloud sync、共同編集、branch merge、PDF 本文抽出、plugin API、CAS garbage collection は Phase 1 の対象外。データモデルは後から追加できるが、安全性の根拠がない未完成機能は UI に成功したように見せない。
+cloud sync、共同編集、branch merge、PDF 本文抽出、CAS garbage collection は Phase 1 の対象外。ChatGPT/Codex接続はlocalhost限定MCPとして追加し、Sanctum coreの保存APIと排他制御を迂回しない。データモデルは後から追加できるが、安全性の根拠がない未完成機能は UI に成功したように見せない。

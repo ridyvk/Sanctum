@@ -1,0 +1,29 @@
+{
+  "name": "sanctum",
+  "version": "0.5.0",
+  "description": "Sanctumで開いている研究Vaultを安全に読み取り、編集する個人用プラグイン",
+  "author": {
+    "name": "Sanctum",
+    "url": "https://github.com/ridyvk/Sanctum"
+  },
+  "homepage": "https://github.com/ridyvk/Sanctum",
+  "repository": "https://github.com/ridyvk/Sanctum",
+  "license": "MIT",
+  "keywords": ["research", "knowledge", "vault", "local-first"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Sanctum",
+    "shortDescription": "開いている研究VaultをChatGPTから安全に操作",
+    "longDescription": "Sanctumデスクトップで開いているVaultを検索し、仮説ブロックの読取り・作成・競合安全な編集・添付追加・整合性確認を行うローカル専用プラグイン。Sanctum独自のクラウドへVaultを同期しません。",
+    "developerName": "Sanctum",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": [
+      "Sanctumで開いている研究を要約して。",
+      "Sanctumから関連する仮説を探して。",
+      "この内容をSanctumの新しい仮説として保存して。"
+    ],
+    "brandColor": "#000000"
+  },
+  "mcpServers": "./.mcp.json"
+}

@@ -2942,7 +2942,7 @@ dependencies = [
 
 [[package]]
 name = "sanctum-core"
-version = "0.3.1"
+version = "0.5.0"
 dependencies = [
  "argon2",
  "chacha20poly1305",
@@ -2966,7 +2966,7 @@ dependencies = [
 
 [[package]]
 name = "sanctum-desktop"
-version = "0.3.1"
+version = "0.5.0"
 dependencies = [
  "sanctum-core",
  "serde",
@@ -2976,6 +2976,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-process",
  "tauri-plugin-updater",
+ "tempfile",
 ]
 
 [[package]]

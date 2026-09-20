@@ -33,3 +33,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - run: npm ci
       - run: cargo check -p sanctum-desktop --all-targets
+      - run: cargo test -p sanctum-desktop --lib
+      - run: cargo clippy -p sanctum-desktop --all-targets -- -D warnings

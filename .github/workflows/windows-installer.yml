@@ -27,6 +27,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: cargo test -p sanctum-core -- --test-threads=1
+      - run: cargo test -p sanctum-desktop --lib
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -39,7 +40,7 @@ jobs:
             SanctumのWindows版。既存のVaultはそのまま引き継がれる。
 
             v0.3.0以降はSanctumのホーム画面から次の更新を確認・適用できる。
-            v0.4.5では黒いSanctumロゴを白背景の通常アプリアイコンとして表示する。
+            v0.5.0では個人用ChatGPT/Codexプラグイン、localhost限定MCP接続、競合安全な編集と添付追加を実装する。
           releaseDraft: false
           prerelease: false
           args: --bundles nsis

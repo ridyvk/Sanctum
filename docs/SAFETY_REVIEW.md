@@ -30,6 +30,9 @@
 | R18 | disk full | transaction/backup 失敗 | 空き容量の事前確認、atomic temp、失敗を明示 | 事前値と実消費の競合 |
 | R19 | publish直前に同名pathが作られる | 既存Vault/backup上書き | OSのatomic no-replace rename。競合は失敗 | 未対応OSではpublish自体を拒否 |
 | R20 | snapshot directory公開後、DB記録前に停止 | 有効snapshotがUIから見えない | open時に未記録manifestを検証してappend-only recordを回復 | 壊れた未記録snapshotは無視しlive Vaultを優先 |
+| R21 | AI接続がSQLiteを直接更新 | 履歴・journal・競合検知の迂回 | MCPはactive `Arc<Vault>`の公開APIだけを呼び、直接DB pathを公開しない | core API自体の欠陥 |
+| R22 | AIが古い内容で上書き・破壊操作 | 新しい研究変更の消失 | updateは`expectedRowVersion`必須。delete/restore toolは非公開、stale updateはfail-closed | 利用者が競合後に誤った統合を明示する場合 |
+| R23 | MCPを外部やWeb pageから呼ばれる | 研究情報漏洩・不正変更 | `127.0.0.1`だけにbind、browser `Origin`/CORS要求拒否、JSON専用、ChatGPT pluginはpersonal marketplaceのみ | 同一OSユーザーで任意コードを実行できる攻撃者はVault file自体も読める |
 
 ## 自己レビューで修正した設計上の穴
 

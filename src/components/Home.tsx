@@ -3,14 +3,14 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { api, isDesktopRuntime } from "../api";
 import { formatDate } from "../labels";
 import { loadRecentVaults, rememberVault, type RecentVault } from "../recentVaults";
-import type { VaultSummary } from "../types";
+import type { ChatGptPluginStatus, VaultSummary } from "../types";
 import AppUpdater from "./AppUpdater";
 
 interface Props {
   onOpened: (summary: VaultSummary) => void;
 }
 
-type Modal = "new" | "restore" | null;
+type Modal = "new" | "restore" | "chatgpt" | null;
 
 export default function Home({ onOpened }: Props) {
   const desktop = isDesktopRuntime();
@@ -22,6 +22,8 @@ export default function Home({ onOpened }: Props) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [pluginBusy, setPluginBusy] = useState(false);
+  const [pluginStatus, setPluginStatus] = useState<ChatGptPluginStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const safeFolderName = useMemo(
@@ -96,6 +98,43 @@ export default function Home({ onOpened }: Props) {
     }
   };
 
+  const showChatGpt = async () => {
+    setModal("chatgpt");
+    setPluginBusy(true);
+    setError(null);
+    try {
+      setPluginStatus(await api.chatGptPluginStatus());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPluginBusy(false);
+    }
+  };
+
+  const installChatGpt = async () => {
+    setPluginBusy(true);
+    setError(null);
+    try {
+      setPluginStatus(await api.installChatGptPlugin());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPluginBusy(false);
+    }
+  };
+
+  const openChatGpt = async () => {
+    setPluginBusy(true);
+    setError(null);
+    try {
+      await api.openChatGptPlugin();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPluginBusy(false);
+    }
+  };
+
   return (
     <main className="home">
       <header className="home-hero">
@@ -145,9 +184,14 @@ export default function Home({ onOpened }: Props) {
         )}
 
         <div className="home-footer">
-          <button className="restore-link" disabled={!desktop || busy || updating} onClick={() => { setError(null); setModal("restore"); }}>
-            暗号化Backupから復元
-          </button>
+          <div className="home-footer-links">
+            <button className="restore-link" disabled={!desktop || busy || updating} onClick={() => void showChatGpt()}>
+              ChatGPT接続
+            </button>
+            <button className="restore-link" disabled={!desktop || busy || updating} onClick={() => { setError(null); setModal("restore"); }}>
+              暗号化Backupから復元
+            </button>
+          </div>
           <AppUpdater desktop={desktop} onInstallStateChange={setUpdating} />
         </div>
       </section>
@@ -163,13 +207,36 @@ export default function Home({ onOpened }: Props) {
                 <label>保存先<div className="path-picker"><input readOnly value={parentPath} placeholder="ローカルフォルダを選択" /><button className="button secondary" onClick={() => void chooseParent()}>選択</button></div></label>
                 <div className="modal-actions"><button className="button ghost" onClick={() => setModal(null)}>キャンセル</button><button className="button primary" disabled={!safeFolderName || !parentPath || busy} onClick={() => void createVault()}>{busy ? "作成中" : "作成"}</button></div>
               </>
-            ) : (
+            ) : modal === "restore" ? (
               <>
                 <h2 id="modal-title">Backupから復元</h2>
                 <p className="muted">既存のVaultは上書きせず、新しいVaultとして復元する</p>
                 <label>暗号化Backup<div className="path-picker"><input readOnly value={archivePath} placeholder=".sanctum-backupを選択" /><button className="button secondary" onClick={() => void chooseArchive()}>選択</button></div></label>
                 <label>パスワード<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="off" placeholder="12文字以上" /></label>
                 <div className="modal-actions"><button className="button ghost" onClick={() => setModal(null)}>キャンセル</button><button className="button primary" disabled={!archivePath || password.length < 12 || busy} onClick={() => void restoreBackup()}>{busy ? "検証中" : "復元先を選択"}</button></div>
+              </>
+            ) : (
+              <>
+                <h2 id="modal-title">ChatGPT接続</h2>
+                <p className="muted">このPCだけで使う個人用プラグインとして登録する。VaultをSanctum独自のクラウドへ同期しない。ChatGPTが取得した範囲はChatGPTの処理対象になる</p>
+                {error && <div className="error-banner" role="alert">{error}</div>}
+                {pluginStatus?.installed ? (
+                  <div className="plugin-ready">
+                    <strong>登録済み</strong>
+                    <p>SanctumでVaultを開いている間、ChatGPTから検索・読取り・作成・編集・添付追加ができる</p>
+                    <p>初回と更新後はChatGPTデスクトップを再起動して、PersonalのSanctumをインストールまたは更新する</p>
+                  </div>
+                ) : (
+                  <p className="muted">登録後、ChatGPTデスクトップを再起動してPersonalからSanctumをインストールする</p>
+                )}
+                <div className="modal-actions">
+                  <button className="button ghost" onClick={() => setModal(null)}>閉じる</button>
+                  {pluginStatus?.installed ? (
+                    <button className="button primary" disabled={pluginBusy} onClick={() => void openChatGpt()}>{pluginBusy ? "開いている" : "ChatGPTで開く"}</button>
+                  ) : (
+                    <button className="button primary" disabled={pluginBusy} onClick={() => void installChatGpt()}>{pluginBusy ? "登録中" : "登録する"}</button>
+                  )}
+                </div>
               </>
             )}
           </section>

@@ -230,3 +230,10 @@ export interface AutomaticBackupStatus {
   hasCredential: boolean;
   due: boolean;
 }
+
+export interface ChatGptPluginStatus {
+  installed: boolean;
+  pluginPath: string;
+  marketplacePath: string;
+  deepLink: string;
+}

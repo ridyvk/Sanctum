@@ -1,4 +1,6 @@
 mod credentials;
+mod mcp;
+mod plugin_install;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -13,12 +15,12 @@ use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use zeroize::Zeroizing;
 
 #[derive(Default)]
 struct AppState {
-    vault: Mutex<Option<Arc<Vault>>>,
+    vault: mcp::SharedVault,
 }
 
 #[derive(Debug, Serialize)]
@@ -42,6 +44,12 @@ impl From<std::io::Error> for CommandError {
         Self {
             message: error.to_string(),
         }
+    }
+}
+
+impl From<String> for CommandError {
+    fn from(message: String) -> Self {
+        Self { message }
     }
 }
 
@@ -528,13 +536,39 @@ fn restore_encrypted_backup_to(
     )
 }
 
+#[tauri::command]
+fn chatgpt_plugin_status() -> CommandResult<plugin_install::ChatGptPluginStatus> {
+    Ok(plugin_install::status()?)
+}
+
+#[tauri::command]
+fn install_chatgpt_plugin() -> CommandResult<plugin_install::ChatGptPluginStatus> {
+    Ok(plugin_install::install()?)
+}
+
+#[tauri::command]
+fn open_chatgpt_plugin() -> CommandResult<()> {
+    let status = plugin_install::status()?;
+    if !status.installed {
+        return Err(CommandError {
+            message: "先にSanctumのChatGPT接続を登録して".into(),
+        });
+    }
+    open_uri_with_default_application(&status.deep_link)?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let state = AppState::default();
+    if let Err(error) = mcp::start(state.vault.clone()) {
+        eprintln!("Sanctum MCP could not start on {}: {error}", mcp::MCP_ADDRESS);
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(AppState::default())
+        .manage(state)
         .invoke_handler(tauri::generate_handler![
             create_vault,
             open_vault,
@@ -581,7 +615,10 @@ pub fn run() {
             run_due_automatic_backup,
             backups,
             verify_encrypted_backup,
-            restore_encrypted_backup_to
+            restore_encrypted_backup_to,
+            chatgpt_plugin_status,
+            install_chatgpt_plugin,
+            open_chatgpt_plugin
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Sanctum desktop runtime");
@@ -643,9 +680,42 @@ fn open_with_default_application(path: &std::path::Path) -> std::io::Result<()> 
     }
 }
 
+#[cfg(windows)]
+fn open_uri_with_default_application(uri: &str) -> std::io::Result<()> {
+    use std::ptr;
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    let operation = "open\0".encode_utf16().collect::<Vec<_>>();
+    let target = uri.encode_utf16().chain(std::iter::once(0)).collect::<Vec<_>>();
+    let result = unsafe {
+        ShellExecuteW(
+            ptr::null_mut(),
+            operation.as_ptr(),
+            target.as_ptr(),
+            ptr::null(),
+            ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    } as isize;
+    if result > 32 {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(format!(
+            "ChatGPT could not open the plugin link (ShellExecuteW {result})"
+        )))
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn open_with_default_application(path: &std::path::Path) -> std::io::Result<()> {
     std::process::Command::new("open").arg(path).spawn()?.wait()?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn open_uri_with_default_application(uri: &str) -> std::io::Result<()> {
+    std::process::Command::new("open").arg(uri).spawn()?.wait()?;
     Ok(())
 }
 
@@ -653,6 +723,15 @@ fn open_with_default_application(path: &std::path::Path) -> std::io::Result<()> 
 fn open_with_default_application(path: &std::path::Path) -> std::io::Result<()> {
     std::process::Command::new("xdg-open")
         .arg(path)
+        .spawn()?
+        .wait()?;
+    Ok(())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn open_uri_with_default_application(uri: &str) -> std::io::Result<()> {
+    std::process::Command::new("xdg-open")
+        .arg(uri)
         .spawn()?
         .wait()?;
     Ok(())

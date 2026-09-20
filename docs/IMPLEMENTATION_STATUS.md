@@ -24,12 +24,14 @@
 | Citation Import | DOI/Crossref、複数entry BibTeX、手入力。既存citation keyは更新し、同一blockへの重複linkを作らない |
 | Research Integrity | DB/FK/journal/version/object/snapshot/backup hash、unsupported、rejected dependency、dangling edge、variable conflict、broken citation、orphan、unbacked change |
 | Security | local-first、DOI取込時だけCrossref、strict CSP、限定 capability、backup key zeroization |
+| ChatGPT / Codex plugin | 個人用marketplace、localhost限定MCP、active Vaultのみ、検索・履歴/関係/UTF-8 text添付の読取・作成・CAS添付・競合安全な編集・整合性確認。delete/restore非公開 |
 
 ## 検証結果
 
 - `cargo test -p sanctum-core -- --test-threads=1`: **26 tests**（0.4.0 CIで再検証）
 - `cargo clippy -p sanctum-core --all-targets -- -D warnings`: **passed**
-- frontend Vitest: **11 passed**
+- frontend Vitest: **13 passed**
+- Sanctum MCP / personal-plugin unit tests: protocol metadata、core経由の履歴保存、stale update拒否、marketplace非破壊merge、invalid JSON拒否、deep-link encoding
 - Windows durability regression: existing files are reopened read/write before `FlushFileBuffers`; Vault creation, attachments, snapshots, backups, and restores share the tested helper
 - Windows production bundle regression: release buildは`custom-protocol`を必須化し、Tauriがdevelopment modeを報告した場合はbuild scriptが停止。0.1.2実行ファイルへのfrontend埋め込みも検査済み
 - Autosave regression: DBメタデータを除いた正規化snapshotだけを比較し、無変更の再保存を停止。1編集につき1回だけ正式保存するfrontend testを追加
@@ -46,7 +48,7 @@
 - branch merge UI
 - PDF 本文抽出・annotation locator UI・内蔵PDF renderer
 - live Vault の at-rest encryption
-- mobile client、plugin API
+- mobile client
 - CAS object の物理 garbage collection
 
 ## 残余リスク
@@ -58,5 +60,6 @@
 5. storage firmware が flush 成功を偽る障害、全コピー同時破壊はアプリだけでは防げない。
 6. Phase 1 installer は未署名のため、Windows SmartScreen が確認を表示する可能性がある。正式配布では信頼された code-signing certificate が必要。
 7. クロス生成したinstallerは構造・内容・hashまで検査済みだが、実Windows上のinstall / launch / uninstall試験は別途必要。
+8. ChatGPT接続は同一ユーザーのlocalhost境界。任意コードを実行できる同一WindowsユーザーはVaultファイル自体にもアクセスできるため、OSアカウントとfull-disk encryptionを信頼境界に含める。
 
 これらを隠して「絶対安全」と表示しない。Research Integrity と Recovery Center は、最後の外部 backup より新しい研究変更も警告する。

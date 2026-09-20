@@ -8,6 +8,7 @@ import type {
   BlockCitationRecord,
   BlockVersion,
   CitationRecord,
+  ChatGptPluginStatus,
   CreateBlockInput,
   EdgeType,
   GraphData,
@@ -109,4 +110,7 @@ export const api = {
   verifyBackup: (archive: string, password: string) => call<void>("verify_encrypted_backup", { archive, password }),
   restoreBackup: (archive: string, password: string, destination: string) =>
     call<string>("restore_encrypted_backup_to", { archive, password, destination }),
+  chatGptPluginStatus: () => call<ChatGptPluginStatus>("chatgpt_plugin_status"),
+  installChatGptPlugin: () => call<ChatGptPluginStatus>("install_chatgpt_plugin"),
+  openChatGptPlugin: () => call<void>("open_chatgpt_plugin"),
 };

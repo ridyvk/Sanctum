@@ -31,6 +31,12 @@ The native Windows installer is built and signed for the in-app updater on a Win
 
 The browser-only Vite target is for UI development and explicitly reports that durable Vault operations require the Tauri runtime. It must never claim that research data was saved.
 
+## 0.5.0 private ChatGPT connection
+
+Version 0.5.0 adds a local MCP endpoint and a personal Sanctum plugin for ChatGPT desktop/Codex. While Sanctum is running, the plugin can inspect the active Vault, list and search blocks, read block history and references, inspect the research graph, read bounded UTF-8 text attachments, create or concurrency-safely update blocks, attach explicitly named local files, and run integrity checks. Every write still passes through `sanctum-core`, including immutable versions, journal events, content-addressed storage, and optimistic concurrency. Destructive delete and restore tools are intentionally not exposed.
+
+The Home screen's `ChatGPT接続` action installs the plugin into the current user's personal marketplace. It is not submitted to the public Plugins Directory, and the MCP server binds only to `127.0.0.1:43991`; live Vault content is not uploaded to a separate Sanctum service.
+
 ## 0.4.5 opaque application icon
 
 Version 0.4.5 keeps the supplied Sanctum mark and its 0.4.4 placement unchanged while replacing transparency with a solid white square background. The opaque artwork is bundled into the Windows executable, installer, Start menu shortcut, desktop shortcut, and taskbar icon; no image is added inside the application UI.
