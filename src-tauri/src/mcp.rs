@@ -237,10 +237,7 @@ fn dispatch(request: &Value, vault: &SharedVault) -> Option<Value> {
         None => return Some(rpc_error(id.unwrap_or(Value::Null), -32600, "Invalid request")),
     };
 
-    if id.is_none() {
-        return None;
-    }
-    let id = id.unwrap_or(Value::Null);
+    let id = id?;
 
     let result = match method {
         "initialize" => {
