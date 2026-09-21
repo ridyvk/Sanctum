@@ -42,7 +42,7 @@ jobs:
             SanctumのWindows版。既存のVaultはそのまま引き継がれる。
 
             v0.3.0以降はSanctumのホーム画面から次の更新を確認・適用できる。
-            v0.5.1ではSecure MCP Tunnelによる普通のChatGPT接続、Windows資格情報マネージャーでの鍵保護、自動再接続を実装する。
+            v0.5.2では左右パネルの開閉、ブロックの右クリック操作、本文・研究ノートの大画面表示を追加する。
           releaseDraft: false
           prerelease: false
           args: --bundles nsis

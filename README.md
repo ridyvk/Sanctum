@@ -31,6 +31,10 @@ The native Windows installer is built and signed for the in-app updater on a Win
 
 The browser-only Vite target is for UI development and explicitly reports that durable Vault operations require the Tauri runtime. It must never claim that research data was saved.
 
+## 0.5.2 workspace controls
+
+Version 0.5.2 lets either workspace side panel collapse independently so the editor uses the freed width. Blocks now expose a right-click menu with a recoverable move-to-trash action, and both the main text and research notes can expand into a distraction-free large preview. The Vault format and storage core are unchanged.
+
 ## 0.5.1 ordinary ChatGPT connection
 
 Version 0.5.1 connects the same localhost-only MCP server to ordinary ChatGPT web conversations through OpenAI Secure MCP Tunnel. The Home screen guides a one-time setup: create a private tunnel, select the official Windows `tunnel-client`, enter the tunnel ID and runtime API key, then add the tunnel from ChatGPT developer mode. Sanctum starts and stops `tunnel-client` with the application and reconnects automatically on later launches.

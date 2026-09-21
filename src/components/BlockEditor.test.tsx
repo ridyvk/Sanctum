@@ -59,4 +59,22 @@ describe("BlockEditor autosave", () => {
     expect(saveBlock).toHaveBeenCalledTimes(1);
     expect(screen.getByText("保存済み")).toBeInTheDocument();
   });
+
+  it("expands the preview for both the body and research notes", () => {
+    const withNotes = { ...block, researchNotesMarkdown: "# 研究ノート本文" };
+    const { container } = render(<BlockEditor block={withNotes} recovery={null} onSaved={() => undefined} onRecoveryResolved={() => undefined} onError={() => undefined} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "表示" }));
+    fireEvent.click(screen.getByRole("button", { name: "大画面" }));
+
+    expect(container.querySelector(".editor-pane")).toHaveClass("preview-expanded");
+    expect(screen.getByRole("button", { name: "大画面を閉じる" })).toBeInTheDocument();
+    expect(container.querySelector(".markdown-preview")).toHaveTextContent("本文");
+
+    fireEvent.click(screen.getByRole("button", { name: "研究ノート" }));
+    expect(container.querySelector(".markdown-preview")).toHaveTextContent("研究ノート本文");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(container.querySelector(".editor-pane")).not.toHaveClass("preview-expanded");
+  });
 });

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { api } from "../api";
 import { blockFingerprint } from "../blockSnapshot";
 import { blockKindLabel, blockStatusLabel } from "../labels";
@@ -11,6 +12,7 @@ const IntegrityView = lazy(() => import("./IntegrityView"));
 const RecoveryCenter = lazy(() => import("./RecoveryCenter"));
 
 type View = "editor" | "graph" | "integrity" | "recovery";
+type BlockContextMenu = { block: HypothesisBlock; x: number; y: number };
 const commonStatuses = ["Idea", "Testing", "Supported", "Rejected"] as const;
 
 interface Props {
@@ -33,6 +35,11 @@ export default function Workspace({ vault, onClose }: Props) {
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [advancedNavigation, setAdvancedNavigation] = useState(false);
+  const [navigatorOpen, setNavigatorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [contextMenu, setContextMenu] = useState<BlockContextMenu | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<HypothesisBlock | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<{ tone: "error" | "notice"; text: string } | null>(null);
 
   const showError = (text: string) => setMessage({ tone: "error", text });
@@ -93,6 +100,33 @@ export default function Workspace({ vault, onClose }: Props) {
     return () => window.clearTimeout(timer);
   }, [query]);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (!deleteCandidate) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !deleting) setDeleteCandidate(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [deleteCandidate, deleting]);
+
   const selectBlock = async (id: string, switchToEditor = true) => {
     try {
       const [block, draft] = await Promise.all([api.getBlock(id), api.recoveryDraft(id)]);
@@ -146,6 +180,31 @@ export default function Workspace({ vault, onClose }: Props) {
     showNotice("ブロックをゴミ箱へ移動した。履歴は残っている");
   };
 
+  const openBlockContextMenu = (event: ReactMouseEvent<HTMLButtonElement>, block: HypothesisBlock) => {
+    event.preventDefault();
+    const menuWidth = 180;
+    const menuHeight = 88;
+    setContextMenu({
+      block,
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+    });
+  };
+
+  const deleteBlock = async () => {
+    if (!deleteCandidate || deleting) return;
+    setDeleting(true);
+    try {
+      await api.softDeleteBlock(deleteCandidate.id, deleteCandidate.rowVersion);
+      await handleDeleted(deleteCandidate.id);
+      setDeleteCandidate(null);
+    } catch (cause) {
+      showError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const filteredBlocks = useMemo(() => blocks.filter((block) => {
     if (statusFilter === "all") return true;
     if (statusFilter === "other") return !commonStatuses.includes(block.status as typeof commonStatuses[number]);
@@ -155,12 +214,12 @@ export default function Workspace({ vault, onClose }: Props) {
   return (
     <main className="workspace">
       <header className="workspace-topbar">
-        <div className="workspace-brand"><button className="text-button" onClick={() => void onClose()}>戻る</button><div><strong>{currentVault.name}</strong><span>リビジョン {currentVault.revision}</span></div></div>
+        <div className="workspace-brand"><button className="text-button" onClick={() => void onClose()}>戻る</button><div><strong>{currentVault.name}</strong><span>リビジョン {currentVault.revision}</span></div><button className="panel-toggle" onClick={() => setNavigatorOpen((open) => !open)} aria-label={navigatorOpen ? "左パネルを隠す" : "左パネルを表示"} title={navigatorOpen ? "左パネルを隠す" : "左パネルを表示"}><span aria-hidden="true">{navigatorOpen ? "◀" : "▶"}</span></button></div>
         <div className="global-search"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="本文・変数・文献・ファイルを検索" />{query && <button onClick={() => setQuery("")}>消す</button>}{searchHits.length > 0 && <div className="search-results">{searchHits.map((hit) => <button key={hit.blockId} onClick={() => void selectBlock(hit.blockId)}><strong>{hit.title}</strong><span>{hit.excerpt}</span></button>)}</div>}</div>
-        <div className="topbar-safety"><span>ローカル保存</span></div>
+        <div className="topbar-safety"><span>ローカル保存</span><button className="panel-toggle" onClick={() => setInspectorOpen((open) => !open)} aria-label={inspectorOpen ? "右パネルを隠す" : "右パネルを表示"} title={inspectorOpen ? "右パネルを隠す" : "右パネルを表示"}><span aria-hidden="true">{inspectorOpen ? "▶" : "◀"}</span></button></div>
       </header>
 
-      <div className="workspace-grid">
+      <div className={`workspace-grid${navigatorOpen ? "" : " navigator-hidden"}${inspectorOpen ? "" : " inspector-hidden"}`}>
         <aside className="navigator">
           <div className="navigator-tabs">
             <button className={view === "editor" ? "active" : ""} onClick={() => setView("editor")}>ブロック</button>
@@ -174,7 +233,7 @@ export default function Workspace({ vault, onClose }: Props) {
           <label className="filter-select"><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">すべて</option>{commonStatuses.map((status) => <option key={status} value={status}>{blockStatusLabel[status]}</option>)}<option value="other">その他</option></select></label>
 
           <nav className="block-list" aria-label="仮説ブロック">
-            {filteredBlocks.map((block) => <button key={block.id} className={selected?.id === block.id ? "active" : ""} onClick={() => void selectBlock(block.id)}><span className={`status-dot status-${block.status.toLowerCase().replaceAll(" ", "-")}`} /><div><strong>{block.title}</strong><span>{blockKindLabel[block.kind]} · {block.id.slice(0, 8).toUpperCase()}{block.parentBlockId ? " · 分岐" : ""}</span></div></button>)}
+            {filteredBlocks.map((block) => <button key={block.id} className={selected?.id === block.id ? "active" : ""} onClick={() => void selectBlock(block.id)} onContextMenu={(event) => openBlockContextMenu(event, block)}><span className={`status-dot status-${block.status.toLowerCase().replaceAll(" ", "-")}`} /><div><strong>{block.title}</strong><span>{blockKindLabel[block.kind]} · {block.id.slice(0, 8).toUpperCase()}{block.parentBlockId ? " · 分岐" : ""}</span></div></button>)}
             {!loading && !filteredBlocks.length && <div className="navigator-empty"><p>表示するブロックがない</p><button onClick={() => void createBlock()}>仮説を作成</button></div>}
           </nav>
         </aside>
@@ -192,6 +251,23 @@ export default function Workspace({ vault, onClose }: Props) {
 
         <Inspector block={selected} graph={graph} onBlockChanged={(block) => void handleBlockChanged(block)} onDeleted={(id) => void handleDeleted(id)} onGraphChanged={async () => { await refreshGraph(); }} onError={showError} />
       </div>
+
+      {contextMenu && (
+        <div className="block-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
+          <button role="menuitem" onClick={() => { void selectBlock(contextMenu.block.id); setContextMenu(null); }}>開く</button>
+          <button className="danger" role="menuitem" onClick={() => { setDeleteCandidate(contextMenu.block); setContextMenu(null); }}>ゴミ箱へ移動</button>
+        </div>
+      )}
+
+      {deleteCandidate && (
+        <div className="modal-backdrop" onMouseDown={() => { if (!deleting) setDeleteCandidate(null); }}>
+          <section className="modal block-delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-block-title" onMouseDown={(event) => event.stopPropagation()}>
+            <h2 id="delete-block-title">ゴミ箱へ移動する？</h2>
+            <p className="muted"><strong>{deleteCandidate.title}</strong>を一覧から外す。履歴は残り、データ画面から復元できる</p>
+            <div className="modal-actions"><button className="button ghost" disabled={deleting} autoFocus onClick={() => setDeleteCandidate(null)}>キャンセル</button><button className="button danger" disabled={deleting} onClick={() => void deleteBlock()}>{deleting ? "移動中" : "移動する"}</button></div>
+          </section>
+        </div>
+      )}
 
       {message && <div className={`toast ${message.tone}`} role={message.tone === "error" ? "alert" : "status"}><span>{message.text}</span><button className="text-button" onClick={() => setMessage(null)}>閉じる</button></div>}
     </main>
