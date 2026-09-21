@@ -1,6 +1,6 @@
 {
   "name": "sanctum",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Sanctumで開いている研究Vaultを安全に読み取り、編集する個人用プラグイン",
   "author": {
     "name": "Sanctum",

@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { api, isDesktopRuntime } from "../api";
 import { formatDate } from "../labels";
 import { loadRecentVaults, rememberVault, type RecentVault } from "../recentVaults";
-import type { ChatGptPluginStatus, VaultSummary } from "../types";
+import type { ChatGptPluginStatus, ChatGptTunnelStatus, VaultSummary } from "../types";
 import AppUpdater from "./AppUpdater";
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
 }
 
 type Modal = "new" | "restore" | "chatgpt" | null;
+type ChatGptMode = "chatgpt" | "codex";
 
 export default function Home({ onOpened }: Props) {
   const desktop = isDesktopRuntime();
@@ -24,6 +25,11 @@ export default function Home({ onOpened }: Props) {
   const [updating, setUpdating] = useState(false);
   const [pluginBusy, setPluginBusy] = useState(false);
   const [pluginStatus, setPluginStatus] = useState<ChatGptPluginStatus | null>(null);
+  const [chatGptMode, setChatGptMode] = useState<ChatGptMode>("chatgpt");
+  const [tunnelStatus, setTunnelStatus] = useState<ChatGptTunnelStatus | null>(null);
+  const [tunnelId, setTunnelId] = useState("");
+  const [runtimeApiKey, setRuntimeApiKey] = useState("");
+  const [tunnelClientPath, setTunnelClientPath] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const safeFolderName = useMemo(
@@ -44,6 +50,16 @@ export default function Home({ onOpened }: Props) {
       filters: [{ name: "Sanctum backup", extensions: ["sanctum-backup"] }],
     });
     if (typeof selected === "string") setArchivePath(selected);
+  };
+
+  const chooseTunnelClient = async () => {
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      title: "OpenAI tunnel-client.exeを選択",
+      filters: [{ name: "Windows executable", extensions: ["exe"] }],
+    });
+    if (typeof selected === "string") setTunnelClientPath(selected);
   };
 
   const createVault = async () => {
@@ -100,14 +116,94 @@ export default function Home({ onOpened }: Props) {
 
   const showChatGpt = async () => {
     setModal("chatgpt");
+    setChatGptMode("chatgpt");
     setPluginBusy(true);
     setError(null);
     try {
-      setPluginStatus(await api.chatGptPluginStatus());
+      const [tunnel, plugin] = await Promise.all([
+        api.chatGptTunnelStatus(),
+        api.chatGptPluginStatus(),
+      ]);
+      setTunnelStatus(tunnel);
+      setTunnelId(tunnel.tunnelId ?? "");
+      setTunnelClientPath(tunnel.clientPath ?? "");
+      setPluginStatus(plugin);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setPluginBusy(false);
+    }
+  };
+
+  const configureTunnel = async () => {
+    if (!tunnelId.trim() || !tunnelClientPath || (!runtimeApiKey && !tunnelStatus?.hasCredential)) return;
+    setPluginBusy(true);
+    setError(null);
+    try {
+      const status = await api.configureChatGptTunnel(
+        tunnelId.trim(),
+        runtimeApiKey,
+        tunnelClientPath,
+      );
+      setTunnelStatus(status);
+      setTunnelId(status.tunnelId ?? tunnelId.trim());
+      setTunnelClientPath(status.clientPath ?? tunnelClientPath);
+      setRuntimeApiKey("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPluginBusy(false);
+    }
+  };
+
+  const setTunnelRunning = async (running: boolean) => {
+    setPluginBusy(true);
+    setError(null);
+    try {
+      setTunnelStatus(running ? await api.startChatGptTunnel() : await api.stopChatGptTunnel());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPluginBusy(false);
+    }
+  };
+
+  const refreshTunnel = async () => {
+    setPluginBusy(true);
+    setError(null);
+    try {
+      setTunnelStatus(await api.chatGptTunnelStatus());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPluginBusy(false);
+    }
+  };
+
+  const openTunnelSettings = async () => {
+    setError(null);
+    try {
+      await api.openChatGptTunnelSettings();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const openChatGptConnectors = async () => {
+    setError(null);
+    try {
+      await api.openChatGptConnectors();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  const openTunnelAdmin = async () => {
+    setError(null);
+    try {
+      await api.openChatGptTunnelAdmin();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
 
@@ -134,6 +230,14 @@ export default function Home({ onOpened }: Props) {
       setPluginBusy(false);
     }
   };
+
+  useEffect(() => {
+    if (modal !== "chatgpt" || !tunnelStatus?.running || tunnelStatus.ready) return;
+    const interval = window.setInterval(() => {
+      void api.chatGptTunnelStatus().then(setTunnelStatus).catch(() => undefined);
+    }, 1_500);
+    return () => window.clearInterval(interval);
+  }, [modal, tunnelStatus?.ready, tunnelStatus?.running]);
 
   return (
     <main className="home">
@@ -198,7 +302,7 @@ export default function Home({ onOpened }: Props) {
 
       {modal && (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}>
-          <section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+          <section className={`modal${modal === "chatgpt" ? " connection-modal" : ""}`} role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <button className="text-button modal-close" onClick={() => setModal(null)}>閉じる</button>
             {modal === "new" ? (
               <>
@@ -218,25 +322,93 @@ export default function Home({ onOpened }: Props) {
             ) : (
               <>
                 <h2 id="modal-title">ChatGPT接続</h2>
-                <p className="muted">このPCだけで使う個人用プラグインとして登録する。VaultをSanctum独自のクラウドへ同期しない。ChatGPTが取得した範囲はChatGPTの処理対象になる</p>
+                <div className="connection-tabs segmented" role="tablist" aria-label="接続先">
+                  <button className={chatGptMode === "chatgpt" ? "active" : ""} role="tab" aria-selected={chatGptMode === "chatgpt"} onClick={() => setChatGptMode("chatgpt")}>普通のChatGPT</button>
+                  <button className={chatGptMode === "codex" ? "active" : ""} role="tab" aria-selected={chatGptMode === "codex"} onClick={() => setChatGptMode("codex")}>Codex / Work</button>
+                </div>
                 {error && <div className="error-banner" role="alert">{error}</div>}
-                {pluginStatus?.installed ? (
-                  <div className="plugin-ready">
-                    <strong>登録済み</strong>
-                    <p>SanctumでVaultを開いている間、ChatGPTから検索・読取り・作成・編集・添付追加ができる</p>
-                    <p>初回と更新後はChatGPTデスクトップを再起動して、PersonalのSanctumをインストールまたは更新する</p>
+                {chatGptMode === "chatgpt" ? (
+                  <div className="connection-panel" role="tabpanel">
+                    <p className="muted">普通のChatGPTから、Sanctumで開いているVaultを操作する</p>
+                    <div className="connection-status" data-ready={tunnelStatus?.ready ? "true" : "false"}>
+                      <strong>
+                        {tunnelStatus?.ready
+                          ? "Tunnel準備完了"
+                          : tunnelStatus?.running
+                            ? "Tunnel接続中"
+                            : tunnelStatus?.configured
+                              ? "Tunnel停止中"
+                              : "未設定"}
+                      </strong>
+                      {tunnelStatus?.tunnelId && <code>{tunnelStatus.tunnelId}</code>}
+                      {tunnelStatus?.lastError && <span>{tunnelStatus.lastError}</span>}
+                    </div>
+
+                    <div className="connection-setup-row">
+                      <span>1. Tunnelを作成し、Runtime API keyとWindows版tunnel-clientを取得</span>
+                      <button className="button secondary compact" onClick={() => void openTunnelSettings()}>OpenAI設定</button>
+                    </div>
+
+                    <label>
+                      Tunnel ID
+                      <input value={tunnelId} onChange={(event) => setTunnelId(event.target.value)} placeholder="tunnel_..." autoComplete="off" spellCheck={false} />
+                    </label>
+                    <label>
+                      Runtime API key
+                      <input type="password" value={runtimeApiKey} onChange={(event) => setRuntimeApiKey(event.target.value)} placeholder={tunnelStatus?.hasCredential ? "保存済み。変更時だけ入力" : "OpenAIで発行したkey"} autoComplete="off" spellCheck={false} />
+                    </label>
+                    <label>
+                      tunnel-client.exe
+                      <div className="path-picker">
+                        <input readOnly value={tunnelClientPath} placeholder="ダウンロードしたファイルを選択" />
+                        <button className="button secondary" onClick={() => void chooseTunnelClient()}>選択</button>
+                      </div>
+                    </label>
+                    <p className="credential-note">API keyはWindows資格情報マネージャーへ保存する</p>
+
+                    <div className="modal-actions connection-actions">
+                      <button className="button ghost" disabled={pluginBusy} onClick={() => void refreshTunnel()}>状態を更新</button>
+                      {tunnelStatus?.configured && (
+                        <button className="button secondary" disabled={pluginBusy} onClick={() => void setTunnelRunning(!tunnelStatus.running)}>
+                          {tunnelStatus.running ? "停止" : "起動"}
+                        </button>
+                      )}
+                      <button className="button primary" disabled={pluginBusy || !tunnelId.trim() || !tunnelClientPath || (!runtimeApiKey && !tunnelStatus?.hasCredential)} onClick={() => void configureTunnel()}>
+                        {pluginBusy ? "処理中" : tunnelStatus?.configured ? "設定を更新" : "保存して起動"}
+                      </button>
+                    </div>
+
+                    {tunnelStatus?.running && (
+                      <div className="plugin-ready">
+                        <strong>2. ChatGPTへ追加</strong>
+                        <p>ChatGPTの設定でDeveloper modeを有効にし、接続方法でTunnelを選ぶ</p>
+                        <div className="connection-ready-actions">
+                          {tunnelStatus.adminUiUrl && <button className="button secondary compact" onClick={() => void openTunnelAdmin()}>Tunnel状態</button>}
+                          <button className="button primary compact" onClick={() => void openChatGptConnectors()}>ChatGPTで追加</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <p className="muted">登録後、ChatGPTデスクトップを再起動してPersonalからSanctumをインストールする</p>
+                  <div className="connection-panel" role="tabpanel">
+                    <p className="muted">このPCだけで使う個人用プラグインとして登録する</p>
+                    {pluginStatus?.installed ? (
+                      <div className="plugin-ready">
+                        <strong>登録済み</strong>
+                        <p>SanctumでVaultを開いている間、検索・読取り・作成・編集・添付追加ができる</p>
+                      </div>
+                    ) : (
+                      <p className="muted">登録後、ChatGPT Workを再起動してPersonalからSanctumをインストールする</p>
+                    )}
+                    <div className="modal-actions">
+                      {pluginStatus?.installed ? (
+                        <button className="button primary" disabled={pluginBusy} onClick={() => void openChatGpt()}>{pluginBusy ? "開いている" : "Codexで開く"}</button>
+                      ) : (
+                        <button className="button primary" disabled={pluginBusy} onClick={() => void installChatGpt()}>{pluginBusy ? "登録中" : "登録する"}</button>
+                      )}
+                    </div>
+                  </div>
                 )}
-                <div className="modal-actions">
-                  <button className="button ghost" onClick={() => setModal(null)}>閉じる</button>
-                  {pluginStatus?.installed ? (
-                    <button className="button primary" disabled={pluginBusy} onClick={() => void openChatGpt()}>{pluginBusy ? "開いている" : "ChatGPTで開く"}</button>
-                  ) : (
-                    <button className="button primary" disabled={pluginBusy} onClick={() => void installChatGpt()}>{pluginBusy ? "登録中" : "登録する"}</button>
-                  )}
-                </div>
               </>
             )}
           </section>

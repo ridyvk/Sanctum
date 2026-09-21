@@ -9,6 +9,7 @@ import type {
   BlockVersion,
   CitationRecord,
   ChatGptPluginStatus,
+  ChatGptTunnelStatus,
   CreateBlockInput,
   EdgeType,
   GraphData,
@@ -113,4 +114,13 @@ export const api = {
   chatGptPluginStatus: () => call<ChatGptPluginStatus>("chatgpt_plugin_status"),
   installChatGptPlugin: () => call<ChatGptPluginStatus>("install_chatgpt_plugin"),
   openChatGptPlugin: () => call<void>("open_chatgpt_plugin"),
+  chatGptTunnelStatus: () => call<ChatGptTunnelStatus>("chatgpt_tunnel_status"),
+  configureChatGptTunnel: (tunnelId: string, runtimeApiKey: string, clientPath: string) =>
+    call<ChatGptTunnelStatus>("configure_chatgpt_tunnel", { tunnelId, runtimeApiKey, clientPath }),
+  startChatGptTunnel: () => call<ChatGptTunnelStatus>("start_chatgpt_tunnel"),
+  stopChatGptTunnel: () => call<ChatGptTunnelStatus>("stop_chatgpt_tunnel"),
+  forgetChatGptTunnel: () => call<ChatGptTunnelStatus>("forget_chatgpt_tunnel"),
+  openChatGptTunnelSettings: () => call<void>("open_chatgpt_tunnel_settings"),
+  openChatGptConnectors: () => call<void>("open_chatgpt_connectors"),
+  openChatGptTunnelAdmin: () => call<void>("open_chatgpt_tunnel_admin"),
 };

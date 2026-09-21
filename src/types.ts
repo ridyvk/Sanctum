@@ -237,3 +237,15 @@ export interface ChatGptPluginStatus {
   marketplacePath: string;
   deepLink: string;
 }
+
+export interface ChatGptTunnelStatus {
+  configured: boolean;
+  running: boolean;
+  ready: boolean;
+  tunnelId: string | null;
+  clientPath: string | null;
+  hasCredential: boolean;
+  adminUiUrl: string | null;
+  mcpUrl: string;
+  lastError: string | null;
+}

@@ -1,3 +1,4 @@
+mod chatgpt_tunnel;
 mod credentials;
 mod mcp;
 mod plugin_install;
@@ -21,6 +22,8 @@ use zeroize::Zeroizing;
 #[derive(Default)]
 struct AppState {
     vault: mcp::SharedVault,
+    tunnel: chatgpt_tunnel::TunnelManager,
+    mcp_available: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -558,13 +561,90 @@ fn open_chatgpt_plugin() -> CommandResult<()> {
     Ok(())
 }
 
+#[tauri::command]
+fn chatgpt_tunnel_status(
+    state: tauri::State<'_, AppState>,
+) -> CommandResult<chatgpt_tunnel::ChatGptTunnelStatus> {
+    let mut status = state.tunnel.status()?;
+    if !state.mcp_available {
+        status.last_error = Some(
+            "Sanctumのローカル接続を開始できない。Sanctumを一つだけ起動して".into(),
+        );
+    }
+    Ok(status)
+}
+
+#[tauri::command]
+fn configure_chatgpt_tunnel(
+    state: tauri::State<'_, AppState>,
+    tunnel_id: String,
+    runtime_api_key: String,
+    client_path: String,
+) -> CommandResult<chatgpt_tunnel::ChatGptTunnelStatus> {
+    ensure_mcp_available(&state)?;
+    Ok(state
+        .tunnel
+        .configure(tunnel_id, runtime_api_key, client_path)?)
+}
+
+#[tauri::command]
+fn start_chatgpt_tunnel(
+    state: tauri::State<'_, AppState>,
+) -> CommandResult<chatgpt_tunnel::ChatGptTunnelStatus> {
+    ensure_mcp_available(&state)?;
+    Ok(state.tunnel.start()?)
+}
+
+#[tauri::command]
+fn stop_chatgpt_tunnel(
+    state: tauri::State<'_, AppState>,
+) -> CommandResult<chatgpt_tunnel::ChatGptTunnelStatus> {
+    Ok(state.tunnel.stop()?)
+}
+
+#[tauri::command]
+fn forget_chatgpt_tunnel(
+    state: tauri::State<'_, AppState>,
+) -> CommandResult<chatgpt_tunnel::ChatGptTunnelStatus> {
+    Ok(state.tunnel.forget()?)
+}
+
+#[tauri::command]
+fn open_chatgpt_tunnel_settings() -> CommandResult<()> {
+    open_uri_with_default_application(chatgpt_tunnel::PLATFORM_TUNNELS_URL)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn open_chatgpt_connectors() -> CommandResult<()> {
+    open_uri_with_default_application(chatgpt_tunnel::CHATGPT_CONNECTORS_URL)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn open_chatgpt_tunnel_admin(state: tauri::State<'_, AppState>) -> CommandResult<()> {
+    let status = state.tunnel.status()?;
+    let url = status.admin_ui_url.ok_or_else(|| CommandError {
+        message: "Tunnelの状態画面はまだ起動していない".into(),
+    })?;
+    open_uri_with_default_application(&url)?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let state = AppState::default();
-    if let Err(error) = mcp::start(state.vault.clone()) {
-        eprintln!("Sanctum MCP could not start on {}: {error}", mcp::MCP_ADDRESS);
+    let mut state = AppState::default();
+    state.mcp_available = match mcp::start(state.vault.clone()) {
+        Ok(()) => true,
+        Err(error) => {
+            eprintln!("Sanctum MCP could not start on {}: {error}", mcp::MCP_ADDRESS);
+            false
+        }
+    };
+    if state.mcp_available {
+        state.tunnel.start_if_enabled();
     }
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -618,10 +698,34 @@ pub fn run() {
             restore_encrypted_backup_to,
             chatgpt_plugin_status,
             install_chatgpt_plugin,
-            open_chatgpt_plugin
+            open_chatgpt_plugin,
+            chatgpt_tunnel_status,
+            configure_chatgpt_tunnel,
+            start_chatgpt_tunnel,
+            stop_chatgpt_tunnel,
+            forget_chatgpt_tunnel,
+            open_chatgpt_tunnel_settings,
+            open_chatgpt_connectors,
+            open_chatgpt_tunnel_admin
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run Sanctum desktop runtime");
+        .build(tauri::generate_context!())
+        .expect("failed to build Sanctum desktop runtime");
+    app.run(|app_handle, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            use tauri::Manager;
+            app_handle.state::<AppState>().tunnel.shutdown();
+        }
+    });
+}
+
+fn ensure_mcp_available(state: &tauri::State<'_, AppState>) -> CommandResult<()> {
+    if state.mcp_available {
+        Ok(())
+    } else {
+        Err(CommandError {
+            message: "Sanctumのローカル接続を開始できない。Sanctumを一つだけ起動して".into(),
+        })
+    }
 }
 
 fn automatic_backup_credential_target(vault: &Vault) -> CommandResult<String> {

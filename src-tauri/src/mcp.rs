@@ -252,7 +252,7 @@ fn dispatch(request: &Value, vault: &SharedVault) -> Option<Value> {
             json!({
                 "protocolVersion": protocol_version,
                 "capabilities": {"tools": {"listChanged": false}},
-                "serverInfo": {"name": "sanctum", "version": "0.5.0"},
+                "serverInfo": {"name": "sanctum", "version": "0.5.1"},
                 "instructions": "Sanctumデスクトップで開いているVaultだけを扱います。編集前に最新版を取得し、rowVersionによる競合検知を必ず使ってください。削除と復元は提供しません。"
             })
         }

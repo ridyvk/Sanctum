@@ -30,7 +30,7 @@ pub fn write_password(target: &str, password: &str) -> std::io::Result<()> {
 pub fn write_password(_target: &str, _password: &str) -> std::io::Result<()> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
-        "automatic backup credentials require Windows Credential Manager",
+        "secure credentials require Windows Credential Manager",
     ))
 }
 
@@ -57,7 +57,7 @@ pub fn read_password(target: &str) -> std::io::Result<Zeroizing<String>> {
         String::from_utf8(bytes.to_vec()).map(Zeroizing::new).map_err(|_| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "stored automatic backup password is not valid UTF-8",
+                "stored credential is not valid UTF-8",
             )
         })
     };
@@ -69,7 +69,7 @@ pub fn read_password(target: &str) -> std::io::Result<Zeroizing<String>> {
 pub fn read_password(_target: &str) -> std::io::Result<Zeroizing<String>> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
-        "automatic backup credentials require Windows Credential Manager",
+        "secure credentials require Windows Credential Manager",
     ))
 }
 

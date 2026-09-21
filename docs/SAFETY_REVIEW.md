@@ -33,6 +33,8 @@
 | R21 | AI接続がSQLiteを直接更新 | 履歴・journal・競合検知の迂回 | MCPはactive `Arc<Vault>`の公開APIだけを呼び、直接DB pathを公開しない | core API自体の欠陥 |
 | R22 | AIが古い内容で上書き・破壊操作 | 新しい研究変更の消失 | updateは`expectedRowVersion`必須。delete/restore toolは非公開、stale updateはfail-closed | 利用者が競合後に誤った統合を明示する場合 |
 | R23 | MCPを外部やWeb pageから呼ばれる | 研究情報漏洩・不正変更 | `127.0.0.1`だけにbind、browser `Origin`/CORS要求拒否、JSON専用、ChatGPT pluginはpersonal marketplaceのみ | 同一OSユーザーで任意コードを実行できる攻撃者はVault file自体も読める |
+| R24 | Secure MCP TunnelのRuntime API keyが漏れる | 第三者がTunnelを使用 | keyはWindows Credential Managerだけに保存し、process environmentで渡す。設定JSON・argv・frontend・GitHubへ出さない | 同一Windows user権限、Credential Manager侵害、OpenAI account侵害 |
+| R25 | remote ChatGPTが誤操作またはprompt injectionで書き込む | 研究内容の不正確な変更 | developer modeを明示、active Vaultだけ、全writeはcore API・immutable version・row version競合検知を通す。delete/restore toolは非公開 | 利用者が承認した誤変更。ChatGPTへ取得された情報はOpenAI側の処理対象になる |
 
 ## 自己レビューで修正した設計上の穴
 

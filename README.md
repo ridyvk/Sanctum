@@ -31,6 +31,12 @@ The native Windows installer is built and signed for the in-app updater on a Win
 
 The browser-only Vite target is for UI development and explicitly reports that durable Vault operations require the Tauri runtime. It must never claim that research data was saved.
 
+## 0.5.1 ordinary ChatGPT connection
+
+Version 0.5.1 connects the same localhost-only MCP server to ordinary ChatGPT web conversations through OpenAI Secure MCP Tunnel. The Home screen guides a one-time setup: create a private tunnel, select the official Windows `tunnel-client`, enter the tunnel ID and runtime API key, then add the tunnel from ChatGPT developer mode. Sanctum starts and stops `tunnel-client` with the application and reconnects automatically on later launches.
+
+The runtime API key is stored in Windows Credential Manager. It is passed to `tunnel-client` only through its process environment and is never written to the Sanctum config, command arguments, GitHub, or the frontend. The tunnel is outbound-only; the MCP listener remains bound to `127.0.0.1:43991` and no inbound firewall port is opened. This is a private developer-mode connection, not a public plugin submission. See the official [Secure MCP Tunnel guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) and [ChatGPT developer mode guide](https://developers.openai.com/api/docs/guides/developer-mode).
+
 ## 0.5.0 private ChatGPT connection
 
 Version 0.5.0 adds a local MCP endpoint and a personal Sanctum plugin for ChatGPT desktop/Codex. While Sanctum is running, the plugin can inspect the active Vault, list and search blocks, read block history and references, inspect the research graph, read bounded UTF-8 text attachments, create or concurrency-safely update blocks, attach explicitly named local files, and run integrity checks. Every write still passes through `sanctum-core`, including immutable versions, journal events, content-addressed storage, and optimistic concurrency. Destructive delete and restore tools are intentionally not exposed.
