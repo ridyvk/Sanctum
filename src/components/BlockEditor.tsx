@@ -74,6 +74,7 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
   const [saveState, setSaveState] = useState<SaveState>(recovery ? "recovered" : "saved");
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [documentTab, setDocumentTab] = useState<DocumentTab>("hypothesis");
+  const [previewExpanded, setPreviewExpanded] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState(Boolean(recovery));
   const formRef = useRef(form);
   const blockRef = useRef(block);
@@ -85,6 +86,15 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
   useEffect(() => {
     formRef.current = form;
   }, [form]);
+
+  useEffect(() => {
+    if (!previewExpanded) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPreviewExpanded(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [previewExpanded]);
 
   const currentSnapshot = useMemo(() => formSnapshot(block.id, form), [block.id, form]);
   const dirty = blockFingerprint(currentSnapshot) !== blockFingerprint(committedRef.current);
@@ -188,9 +198,13 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
   };
 
   const markdown = documentTab === "hypothesis" ? form.bodyMarkdown : form.researchNotesMarkdown;
+  const setMode = (mode: ViewMode) => {
+    setViewMode(mode);
+    if (mode !== "preview") setPreviewExpanded(false);
+  };
 
   return (
-    <section className="editor-pane" aria-label="ブロック編集">
+    <section className={`editor-pane${previewExpanded ? " preview-expanded" : ""}`} aria-label="ブロック編集">
       {recoveryPending && (
         <div className="recovery-banner" role="alert">
           <div><span><strong>未保存の編集が見つかった</strong> · {formatDateTime(recovery!.updatedAt)}</span></div>
@@ -200,18 +214,16 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
 
       <header className="editor-header">
         <div className="block-identity">
-          <span className="block-id">{block.id.slice(0, 8).toUpperCase()}</span>
-          <select className="quiet-select" value={form.kind} onChange={(event) => updateForm({ kind: event.target.value as BlockKind })} aria-label="種類">
-            {kinds.map((kind) => <option key={kind} value={kind}>{blockKindLabel[kind]}</option>)}
-          </select>
+          {previewExpanded ? <strong className="preview-expanded-title">{form.title || "無題の仮説"}</strong> : <><span className="block-id">{block.id.slice(0, 8).toUpperCase()}</span><select className="quiet-select" value={form.kind} onChange={(event) => updateForm({ kind: event.target.value as BlockKind })} aria-label="種類">{kinds.map((kind) => <option key={kind} value={kind}>{blockKindLabel[kind]}</option>)}</select></>}
         </div>
         <div className="editor-header-actions">
           <SaveIndicator state={saveState} />
           <div className="segmented" aria-label="表示切替">
-            <button className={viewMode === "editor" ? "active" : ""} onClick={() => setViewMode("editor")}>編集</button>
-            <button className={viewMode === "split" ? "active" : ""} onClick={() => setViewMode("split")}>分割</button>
-            <button className={viewMode === "preview" ? "active" : ""} onClick={() => setViewMode("preview")}>表示</button>
+            <button className={viewMode === "editor" ? "active" : ""} onClick={() => setMode("editor")}>編集</button>
+            <button className={viewMode === "split" ? "active" : ""} onClick={() => setMode("split")}>分割</button>
+            <button className={viewMode === "preview" ? "active" : ""} onClick={() => setMode("preview")}>表示</button>
           </div>
+          {viewMode === "preview" && <button className="text-button preview-expand-button" aria-label={previewExpanded ? "大画面を閉じる" : "大画面"} aria-pressed={previewExpanded} onClick={() => setPreviewExpanded((expanded) => !expanded)}>{previewExpanded ? "戻す" : "大画面"}</button>}
         </div>
       </header>
 
