@@ -184,7 +184,7 @@ function MobileRecoveryCenter({ onBlocksChanged, onError, onNotice, onIntegrity 
     try {
       const record = await api.createMobileBackup(password);
       try {
-        const saved = await saveMobileFile(record.destinationPath, record.fileName, record.archiveSha256);
+        const saved = await saveMobileFile(record.destinationPath, record.fileName);
         if (saved) { setPassword(""); onNotice("暗号化Backupを書き出して検証した"); }
       } finally { await api.discardMobileExport(record.destinationPath); }
       await reload();
