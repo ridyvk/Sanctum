@@ -153,7 +153,7 @@ function FilesPanel({ block, files, onChanged, onError }: { block: HypothesisBlo
       for (const [index, path] of paths.entries()) {
         if (!android) { await api.attachFile(block.id, path, relationRef.current); continue; }
         const name = decodeURIComponent(path.split("/").at(-1) ?? "").split("/").at(-1)!
-          .replace(/[\\/:*?"<>|\x00-\x1f]/g, "-").trim().slice(0, 140) || `添付-${index + 1}`;
+          .replace(/[\\/:*?"<>|\x00-\x1f]/g, "-").trim().replace(/^[ .]+|[ .]+$/g, "").slice(0, 140) || `添付-${index + 1}`;
         const bytes = await readFile(path);
         if (bytes.byteLength > 64 * 1024 * 1024) throw new Error("64 MBを超える添付ファイルはこの版では追加できない");
         const transfer = await api.prepareMobileImport(name);

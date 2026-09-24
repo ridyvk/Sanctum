@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   softDeleteBlock: vi.fn(),
 }));
 
-vi.mock("../api", () => ({ api: mocks }));
+vi.mock("../api", () => ({ api: mocks, isAndroidRuntime: () => false }));
 vi.mock("./BlockEditor", () => ({
   default: ({ block }: { block: HypothesisBlock }) => <section aria-label="ブロック編集">{block.title}</section>,
 }));
