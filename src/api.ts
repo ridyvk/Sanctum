@@ -27,10 +27,11 @@ import type {
 } from "./types";
 
 export const isDesktopRuntime = () => typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
+export const isAndroidRuntime = () => isDesktopRuntime() && /Android/i.test(navigator.userAgent);
 
 const call = async <T>(command: string, args: Record<string, unknown> = {}): Promise<T> => {
   if (!isDesktopRuntime()) {
-    throw new Error("Durable Vault operations require the Sanctum desktop runtime.");
+    throw new Error("Vaultの保存にはSanctumアプリが必要");
   }
   try {
     return await invoke<T>(command, args);
@@ -43,6 +44,20 @@ const call = async <T>(command: string, args: Record<string, unknown> = {}): Pro
 };
 
 export const api = {
+  listMobileVaults: () => call<VaultSummary[]>("list_mobile_vaults"),
+  createMobileVault: (name: string) => call<VaultSummary>("create_mobile_vault", { name }),
+  openMobileVault: (path: string) => call<VaultSummary>("open_mobile_vault", { path }),
+  prepareMobileImport: (fileName: string) => call<{ id: string; path: string }>("prepare_mobile_import", { fileName }),
+  discardMobileImport: (id: string, fileName: string) => call<void>("discard_mobile_import", { id, fileName }),
+  restoreMobileBackup: (id: string, fileName: string, password: string) =>
+    call<VaultSummary>("restore_mobile_backup", { id, fileName, password }),
+  attachMobileImport: (id: string, fileName: string, blockId: string, relation: AttachmentRelation) =>
+    call<Attachment>("attach_mobile_import", { id, fileName, blockId, relation }),
+  createMobileBackup: (password: string) => call<BackupRecord>("create_mobile_backup", { password }),
+  restoreMobileSnapshot: (snapshotId: string) => call<VaultSummary>("restore_mobile_snapshot", { snapshotId }),
+  exportMobileAttachment: (attachmentId: string) =>
+    call<{ path: string; fileName: string }>("export_mobile_attachment", { attachmentId }),
+  discardMobileExport: (path: string) => call<void>("discard_mobile_export", { path }),
   createVault: (path: string, name: string) => call<VaultSummary>("create_vault", { path, name }),
   openVault: (path: string) => call<VaultSummary>("open_vault", { path }),
   closeVault: () => call<void>("close_vault"),

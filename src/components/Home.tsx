@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { api, isDesktopRuntime } from "../api";
+import { readFile, writeFile } from "@tauri-apps/plugin-fs";
+import { api, isAndroidRuntime, isDesktopRuntime } from "../api";
 import { formatDate } from "../labels";
 import { loadRecentVaults, rememberVault, type RecentVault } from "../recentVaults";
 import type { ChatGptPluginStatus, ChatGptTunnelStatus, VaultSummary } from "../types";
@@ -14,7 +15,8 @@ type Modal = "new" | "restore" | "chatgpt" | null;
 type ChatGptMode = "chatgpt" | "codex";
 
 export default function Home({ onOpened }: Props) {
-  const desktop = isDesktopRuntime();
+  const android = isAndroidRuntime();
+  const desktop = isDesktopRuntime() && !android;
   const [recent, setRecent] = useState<RecentVault[]>(() => loadRecentVaults());
   const [modal, setModal] = useState<Modal>(null);
   const [name, setName] = useState("");
@@ -31,6 +33,24 @@ export default function Home({ onOpened }: Props) {
   const [runtimeApiKey, setRuntimeApiKey] = useState("");
   const [tunnelClientPath, setTunnelClientPath] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [mobileLoading, setMobileLoading] = useState(android);
+
+  useEffect(() => {
+    if (!android) return;
+    let cancelled = false;
+    void api.listMobileVaults().then((vaults) => {
+      if (cancelled) return;
+      const previous = loadRecentVaults();
+      setRecent(vaults.map((vault) => ({
+        vaultId: vault.vaultId,
+        name: vault.name,
+        path: vault.path,
+        lastOpenedAt: previous.find((entry) => entry.path === vault.path)?.lastOpenedAt ?? vault.createdAt,
+      })));
+    }).catch((cause) => { if (!cancelled) setError(String(cause)); })
+      .finally(() => { if (!cancelled) setMobileLoading(false); });
+    return () => { cancelled = true; };
+  }, [android]);
 
   const safeFolderName = useMemo(
     () => name.trim().replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " "),
@@ -63,11 +83,13 @@ export default function Home({ onOpened }: Props) {
   };
 
   const createVault = async () => {
-    if (!safeFolderName || !parentPath) return;
+    if (!safeFolderName || (!android && !parentPath)) return;
     setBusy(true);
     setError(null);
     try {
-      const summary = await api.createVault(`${parentPath}/${safeFolderName}.sanctum`, name.trim());
+      const summary = android
+        ? await api.createMobileVault(name.trim())
+        : await api.createVault(`${parentPath}/${safeFolderName}.sanctum`, name.trim());
       setRecent(rememberVault(summary));
       onOpened(summary);
     } catch (cause) {
@@ -81,9 +103,9 @@ export default function Home({ onOpened }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const selected = path ?? (await open({ directory: true, multiple: false, title: ".sanctum Vaultを開く" }));
+      const selected = path ?? (android ? null : await open({ directory: true, multiple: false, title: ".sanctum Vaultを開く" }));
       if (typeof selected !== "string") return;
-      const summary = await api.openVault(selected);
+      const summary = android ? await api.openMobileVault(selected) : await api.openVault(selected);
       setRecent(rememberVault(summary));
       onOpened(summary);
     } catch (cause) {
@@ -95,6 +117,29 @@ export default function Home({ onOpened }: Props) {
 
   const restoreBackup = async () => {
     if (!archivePath || password.length < 12) return;
+    if (android) {
+      const fileName = "incoming.sanctum-backup";
+      setBusy(true);
+      setError(null);
+      try {
+        const contents = await readFile(archivePath);
+        if (contents.byteLength > 64 * 1024 * 1024) throw new Error("64 MBを超えるBackupはこの版では読み込めない");
+        const transfer = await api.prepareMobileImport(fileName);
+        try {
+          await writeFile(transfer.path, contents);
+          const summary = await api.restoreMobileBackup(transfer.id, fileName, password);
+          setRecent(rememberVault(summary));
+          onOpened(summary);
+        } finally {
+          await api.discardMobileImport(transfer.id, fileName);
+        }
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const destination = await save({
       title: "復元先の新しいVault名を指定",
       defaultPath: `${name.trim() || "Recovered"}.sanctum`,
@@ -260,10 +305,10 @@ export default function Home({ onOpened }: Props) {
             <h2 id="projects-heading">研究</h2>
           </div>
           <div className="home-actions">
-            <button className="button secondary" disabled={!desktop || busy || updating} onClick={() => void openPath()}>
-              Vaultを開く
+            <button className="button secondary" disabled={!isDesktopRuntime() || busy || updating} onClick={() => android ? (setError(null), setModal("restore")) : void openPath()}>
+              {android ? "Backupを読み込む" : "Vaultを開く"}
             </button>
-            <button className="button primary" disabled={!desktop || busy || updating} onClick={() => { setError(null); setModal("new"); }}>
+            <button className="button primary" disabled={!isDesktopRuntime() || busy || updating} onClick={() => { setError(null); setModal("new"); }}>
               新規作成
             </button>
           </div>
@@ -271,10 +316,10 @@ export default function Home({ onOpened }: Props) {
 
         {error && <div className="error-banner" role="alert">{error}</div>}
 
-        {recent.length ? (
+        {mobileLoading ? <div className="center-message">研究を読み込み中</div> : recent.length ? (
           <div className="project-grid">
             {recent.map((project) => (
-              <button className="project-card" key={`${project.vaultId}-${project.path}`} onClick={() => void openPath(project.path)} disabled={!desktop || busy || updating}>
+              <button className="project-card" key={`${project.vaultId}-${project.path}`} onClick={() => void openPath(project.path)} disabled={!isDesktopRuntime() || busy || updating}>
                 <h3>{project.name}</h3>
                 <p>{project.path}</p>
                 <time>{formatDate(project.lastOpenedAt)}</time>
@@ -289,12 +334,12 @@ export default function Home({ onOpened }: Props) {
 
         <div className="home-footer">
           <div className="home-footer-links">
-            <button className="restore-link" disabled={!desktop || busy || updating} onClick={() => void showChatGpt()}>
+            {desktop && <button className="restore-link" disabled={busy || updating} onClick={() => void showChatGpt()}>
               ChatGPT接続
-            </button>
-            <button className="restore-link" disabled={!desktop || busy || updating} onClick={() => { setError(null); setModal("restore"); }}>
+            </button>}
+            {!android && <button className="restore-link" disabled={!desktop || busy || updating} onClick={() => { setError(null); setModal("restore"); }}>
               暗号化Backupから復元
-            </button>
+            </button>}
           </div>
           <AppUpdater desktop={desktop} onInstallStateChange={setUpdating} />
         </div>
@@ -308,8 +353,8 @@ export default function Home({ onOpened }: Props) {
               <>
                 <h2 id="modal-title">新しいSanctum</h2>
                 <label>研究テーマ<input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="無期限寿命の経済学" /></label>
-                <label>保存先<div className="path-picker"><input readOnly value={parentPath} placeholder="ローカルフォルダを選択" /><button className="button secondary" onClick={() => void chooseParent()}>選択</button></div></label>
-                <div className="modal-actions"><button className="button ghost" onClick={() => setModal(null)}>キャンセル</button><button className="button primary" disabled={!safeFolderName || !parentPath || busy} onClick={() => void createVault()}>{busy ? "作成中" : "作成"}</button></div>
+                {android ? <p className="muted">このスマホ内に保存する</p> : <label>保存先<div className="path-picker"><input readOnly value={parentPath} placeholder="ローカルフォルダを選択" /><button className="button secondary" onClick={() => void chooseParent()}>選択</button></div></label>}
+                <div className="modal-actions"><button className="button ghost" onClick={() => setModal(null)}>キャンセル</button><button className="button primary" disabled={!safeFolderName || (!android && !parentPath) || busy} onClick={() => void createVault()}>{busy ? "作成中" : "作成"}</button></div>
               </>
             ) : modal === "restore" ? (
               <>
@@ -317,7 +362,7 @@ export default function Home({ onOpened }: Props) {
                 <p className="muted">既存のVaultは上書きせず、新しいVaultとして復元する</p>
                 <label>暗号化Backup<div className="path-picker"><input readOnly value={archivePath} placeholder=".sanctum-backupを選択" /><button className="button secondary" onClick={() => void chooseArchive()}>選択</button></div></label>
                 <label>パスワード<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="off" placeholder="12文字以上" /></label>
-                <div className="modal-actions"><button className="button ghost" onClick={() => setModal(null)}>キャンセル</button><button className="button primary" disabled={!archivePath || password.length < 12 || busy} onClick={() => void restoreBackup()}>{busy ? "検証中" : "復元先を選択"}</button></div>
+                <div className="modal-actions"><button className="button ghost" onClick={() => setModal(null)}>キャンセル</button><button className="button primary" disabled={!archivePath || password.length < 12 || busy} onClick={() => void restoreBackup()}>{busy ? "検証中" : android ? "復元する" : "復元先を選択"}</button></div>
               </>
             ) : (
               <>

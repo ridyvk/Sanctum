@@ -1,0 +1,25 @@
+{
+  "identifier": "research.sanctum.mobile",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Sanctum",
+        "width": 390,
+        "height": 844,
+        "minWidth": 320,
+        "minHeight": 480,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "capabilities": ["mobile-capability"]
+    }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "android": {
+      "minSdkVersion": 24
+    }
+  }
+}

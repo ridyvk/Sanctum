@@ -72,7 +72,9 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
     formFrom(initialSnapshot, recovery ? "復旧した編集内容" : "自動保存"),
   );
   const [saveState, setSaveState] = useState<SaveState>(recovery ? "recovered" : "saved");
-  const [viewMode, setViewMode] = useState<ViewMode>("split");
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    window.matchMedia?.("(max-width: 1079px)").matches ? "editor" : "split",
+  );
   const [documentTab, setDocumentTab] = useState<DocumentTab>("hypothesis");
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState(Boolean(recovery));
@@ -86,6 +88,20 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
   useEffect(() => {
     formRef.current = form;
   }, [form]);
+
+  // Switching to the graph or data screen unmounts the editor. Keep the latest
+  // text recoverable even when the 300ms draft timer has not fired yet.
+  useEffect(() => () => {
+    const latest = formRef.current;
+    if (blockFingerprint(formSnapshot(block.id, latest)) !== blockFingerprint(committedRef.current)) {
+      void api.persistRecoveryDraft({
+        ...formSnapshot(block.id, latest),
+        blockId: block.id,
+        expectedRowVersion: blockRef.current.rowVersion,
+        changeReason: latest.changeReason.trim() || "自動保存",
+      }).catch(onError);
+    }
+  }, [block.id]);
 
   useEffect(() => {
     if (!previewExpanded) return;

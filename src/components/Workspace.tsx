@@ -12,6 +12,7 @@ const IntegrityView = lazy(() => import("./IntegrityView"));
 const RecoveryCenter = lazy(() => import("./RecoveryCenter"));
 
 type View = "editor" | "graph" | "integrity" | "recovery";
+type MobilePane = "list" | "stage" | "inspector";
 type BlockContextMenu = { block: HypothesisBlock; x: number; y: number };
 const commonStatuses = ["Idea", "Testing", "Supported", "Rejected"] as const;
 
@@ -29,6 +30,7 @@ export default function Workspace({ vault, onClose }: Props) {
   const [recovery, setRecovery] = useState<RecoveryDraft | null>(null);
   const [graph, setGraph] = useState<GraphData>(emptyGraph);
   const [view, setView] = useState<View>("editor");
+  const [mobilePane, setMobilePane] = useState<MobilePane>("list");
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
@@ -132,7 +134,7 @@ export default function Workspace({ vault, onClose }: Props) {
       const [block, draft] = await Promise.all([api.getBlock(id), api.recoveryDraft(id)]);
       setSelected(block);
       setRecovery(draft && blockFingerprint(draft.snapshot) !== blockFingerprint(block) ? draft : null);
-      if (switchToEditor) setView("editor");
+      if (switchToEditor) { setView("editor"); setMobilePane("stage"); }
       setQuery("");
       setSearchHits([]);
     } catch (cause) { showError(cause instanceof Error ? cause.message : String(cause)); }
@@ -151,7 +153,7 @@ export default function Workspace({ vault, onClose }: Props) {
         changeReason: "作成",
       });
       await Promise.all([refreshBlocks(), refreshGraph()]);
-      setSelected(block); setRecovery(null); setView("editor");
+      setSelected(block); setRecovery(null); setView("editor"); setMobilePane("stage");
     } catch (cause) { showError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setCreating(false); }
   };
@@ -167,7 +169,7 @@ export default function Workspace({ vault, onClose }: Props) {
     await Promise.all([refreshBlocks(), refreshGraph()]);
     setSelected(changed);
     setRecovery(null);
-    setView("editor");
+    setView("editor"); setMobilePane("stage");
   };
 
   const handleDeleted = async (blockId: string) => {
@@ -219,7 +221,7 @@ export default function Workspace({ vault, onClose }: Props) {
         <div className="topbar-safety"><span>ローカル保存</span><button className="panel-toggle" onClick={() => setInspectorOpen((open) => !open)} aria-label={inspectorOpen ? "右パネルを隠す" : "右パネルを表示"} title={inspectorOpen ? "右パネルを隠す" : "右パネルを表示"}><span aria-hidden="true">{inspectorOpen ? "▶" : "◀"}</span></button></div>
       </header>
 
-      <div className={`workspace-grid${navigatorOpen ? "" : " navigator-hidden"}${inspectorOpen ? "" : " inspector-hidden"}`}>
+      <div className={`workspace-grid${navigatorOpen ? "" : " navigator-hidden"}${inspectorOpen ? "" : " inspector-hidden"}`} data-mobile-pane={mobilePane} data-view={view}>
         <aside className="navigator">
           <div className="navigator-tabs">
             <button className={view === "editor" ? "active" : ""} onClick={() => setView("editor")}>ブロック</button>
@@ -244,13 +246,21 @@ export default function Workspace({ vault, onClose }: Props) {
               {view === "editor" && (selected ? <BlockEditor key={selected.id} block={selected} recovery={recovery} onSaved={handleSaved} onRecoveryResolved={() => setRecovery(null)} onError={showError} /> : <WelcomeEmpty onCreate={() => void createBlock()} />)}
               {view === "graph" && <ResearchGraph data={graph} selectedBlockId={selected?.id ?? null} onSelectBlock={(id) => void selectBlock(id, false)} onRefresh={refreshGraph} onError={showError} />}
               {view === "integrity" && <IntegrityView onSelectBlock={(id) => void selectBlock(id)} onError={showError} />}
-              {view === "recovery" && <RecoveryCenter onBlocksChanged={async () => { await Promise.all([refreshBlocks(), refreshGraph()]); }} onError={showError} onNotice={showNotice} />}
+              {view === "recovery" && <RecoveryCenter onBlocksChanged={async () => { await Promise.all([refreshBlocks(), refreshGraph()]); }} onError={showError} onNotice={showNotice} onIntegrity={() => setView("integrity")} />}
             </Suspense>
           )}
         </section>
 
         <Inspector block={selected} graph={graph} onBlockChanged={(block) => void handleBlockChanged(block)} onDeleted={(id) => void handleDeleted(id)} onGraphChanged={async () => { await refreshGraph(); }} onError={showError} />
       </div>
+
+      <nav className="mobile-bottom-nav" aria-label="スマホ用ナビゲーション">
+        <button className={view === "editor" && mobilePane === "list" ? "active" : ""} aria-current={view === "editor" && mobilePane === "list" ? "page" : undefined} onClick={() => { setView("editor"); setMobilePane("list"); }}>一覧</button>
+        <button className={view === "editor" && mobilePane === "stage" ? "active" : ""} aria-current={view === "editor" && mobilePane === "stage" ? "page" : undefined} onClick={() => { setView("editor"); setMobilePane("stage"); }}>本文</button>
+        <button className={view === "editor" && mobilePane === "inspector" ? "active" : ""} aria-current={view === "editor" && mobilePane === "inspector" ? "page" : undefined} onClick={() => { setView("editor"); setMobilePane("inspector"); }}>詳細</button>
+        <button className={view === "graph" ? "active" : ""} aria-current={view === "graph" ? "page" : undefined} onClick={() => setView("graph")}>グラフ</button>
+        <button className={view === "recovery" || view === "integrity" ? "active" : ""} aria-current={view === "recovery" || view === "integrity" ? "page" : undefined} onClick={() => setView("recovery")}>データ</button>
+      </nav>
 
       {contextMenu && (
         <div className="block-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
