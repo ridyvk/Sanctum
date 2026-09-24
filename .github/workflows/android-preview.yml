@@ -39,3 +39,20 @@ jobs:
           name: sanctum-android-arm64-debug
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
+
+  windows-desktop-check:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: cargo test -p sanctum-core -- --test-threads=1
+      - run: cargo clippy -p sanctum-core --all-targets -- -D warnings
+      - run: cargo test -p sanctum-desktop --lib
+      - run: cargo clippy -p sanctum-desktop --lib -- -D warnings
+      - run: npm run tauri build -- --no-bundle --ci
