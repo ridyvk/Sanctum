@@ -47,7 +47,10 @@ describe("Android home and Vault transfer", () => {
   it("opens an existing private Vault and creates a new one without a folder picker", async () => {
     const opened = vi.fn();
     const { unmount } = render(<Home onOpened={opened} />);
-    fireEvent.click(await screen.findByRole("button", { name: /寿命の研究/ }));
+    const project = await screen.findByRole("button", { name: /寿命の研究/ });
+    expect(screen.queryByText("ブラウザ表示")).not.toBeInTheDocument();
+    expect(project).not.toHaveTextContent(vault.path);
+    fireEvent.click(project);
     await waitFor(() => expect(mocks.open).toHaveBeenCalledWith(vault.path));
     expect(opened).toHaveBeenCalledWith(vault);
     unmount();

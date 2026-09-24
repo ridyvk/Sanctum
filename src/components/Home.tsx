@@ -290,7 +290,7 @@ export default function Home({ onOpened }: Props) {
         <h1>SANCTUM</h1>
       </header>
 
-      {!desktop && (
+      {!isDesktopRuntime() && (
         <div className="runtime-notice" role="status">
           <div>
             <strong>ブラウザ表示</strong>
@@ -321,7 +321,7 @@ export default function Home({ onOpened }: Props) {
             {recent.map((project) => (
               <button className="project-card" key={`${project.vaultId}-${project.path}`} onClick={() => void openPath(project.path)} disabled={!isDesktopRuntime() || busy || updating}>
                 <h3>{project.name}</h3>
-                <p>{project.path}</p>
+                {!android && <p>{project.path}</p>}
                 <time>{formatDate(project.lastOpenedAt)}</time>
               </button>
             ))}
