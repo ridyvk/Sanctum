@@ -96,7 +96,7 @@ pub(crate) fn rename_noreplace(source: &Path, destination: &Path) -> Result<()> 
         return Err(SanctumError::RefuseOverwrite(destination.to_path_buf()));
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
@@ -107,13 +107,12 @@ pub(crate) fn rename_noreplace(source: &Path, destination: &Path) -> Result<()> 
             SanctumError::InvalidInput("destination path contains a NUL byte".into())
         })?;
         let status = unsafe {
-            libc::renameat2(
-                libc::AT_FDCWD,
-                source.as_ptr(),
-                libc::AT_FDCWD,
-                destination_c.as_ptr(),
-                libc::RENAME_NOREPLACE,
-            )
+            #[cfg(target_os = "linux")]
+            { libc::renameat2(libc::AT_FDCWD, source.as_ptr(), libc::AT_FDCWD, destination_c.as_ptr(), libc::RENAME_NOREPLACE) }
+            // The bionic renameat2 symbol is not available on every Android
+            // API level supported by Tauri, while the kernel syscall is.
+            #[cfg(target_os = "android")]
+            { libc::syscall(libc::SYS_renameat2, libc::AT_FDCWD, source.as_ptr(), libc::AT_FDCWD, destination_c.as_ptr(), libc::RENAME_NOREPLACE) as libc::c_int }
         };
         if status == 0 {
             return Ok(());
@@ -160,7 +159,7 @@ pub(crate) fn rename_noreplace(source: &Path, destination: &Path) -> Result<()> 
         })
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "windows")))]
     {
         let _ = source;
         Err(SanctumError::UnsupportedFormat(

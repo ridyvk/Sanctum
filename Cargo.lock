@@ -2968,15 +2968,20 @@ dependencies = [
 name = "sanctum-desktop"
 version = "0.5.2"
 dependencies = [
+ "base64",
  "sanctum-core",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "tauri-plugin-fs",
  "tauri-plugin-process",
  "tauri-plugin-updater",
  "tempfile",
+ "uuid",
+ "windows-sys 0.59.0",
+ "zeroize",
 ]
 
 [[package]]

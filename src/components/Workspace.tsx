@@ -1,6 +1,6 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { api } from "../api";
+import { api, isAndroidRuntime } from "../api";
 import { blockFingerprint } from "../blockSnapshot";
 import { blockKindLabel, blockStatusLabel } from "../labels";
 import type { GraphData, HypothesisBlock, RecoveryDraft, SearchHit, VaultSummary } from "../types";
@@ -12,6 +12,7 @@ const IntegrityView = lazy(() => import("./IntegrityView"));
 const RecoveryCenter = lazy(() => import("./RecoveryCenter"));
 
 type View = "editor" | "graph" | "integrity" | "recovery";
+type MobilePane = "list" | "stage" | "inspector";
 type BlockContextMenu = { block: HypothesisBlock; x: number; y: number };
 const commonStatuses = ["Idea", "Testing", "Supported", "Rejected"] as const;
 
@@ -29,6 +30,7 @@ export default function Workspace({ vault, onClose }: Props) {
   const [recovery, setRecovery] = useState<RecoveryDraft | null>(null);
   const [graph, setGraph] = useState<GraphData>(emptyGraph);
   const [view, setView] = useState<View>("editor");
+  const [mobilePane, setMobilePane] = useState<MobilePane>("list");
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
@@ -41,9 +43,26 @@ export default function Workspace({ vault, onClose }: Props) {
   const [deleteCandidate, setDeleteCandidate] = useState<HypothesisBlock | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<{ tone: "error" | "notice"; text: string } | null>(null);
+  const mobileFlushRef = useRef<(() => Promise<void>) | null>(null);
+  const registerMobileFlush = useCallback((flush: (() => Promise<void>) | null) => { mobileFlushRef.current = flush; }, []);
 
   const showError = (text: string) => setMessage({ tone: "error", text });
   const showNotice = (text: string) => setMessage({ tone: "notice", text });
+
+  const flushMobileDraft = async () => {
+    if (isAndroidRuntime()) await mobileFlushRef.current?.();
+  };
+
+  const leaveMobileEditor = async (nextView: "graph" | "recovery") => {
+    if (!isAndroidRuntime()) { setView(nextView); return; }
+    try { await flushMobileDraft(); setView(nextView); }
+    catch (cause) { showError(`下書きを保存できなかった: ${String(cause)}`); }
+  };
+
+  const closeVault = async () => {
+    try { if (isAndroidRuntime()) await flushMobileDraft(); await onClose(); }
+    catch (cause) { showError(`Vaultを閉じられなかった: ${String(cause)}`); }
+  };
 
   const refreshGraph = useCallback(async () => {
     const [nextGraph, summary] = await Promise.all([api.graph(), api.summary()]);
@@ -129,10 +148,11 @@ export default function Workspace({ vault, onClose }: Props) {
 
   const selectBlock = async (id: string, switchToEditor = true) => {
     try {
+      if (isAndroidRuntime() && selected?.id !== id) await flushMobileDraft();
       const [block, draft] = await Promise.all([api.getBlock(id), api.recoveryDraft(id)]);
       setSelected(block);
       setRecovery(draft && blockFingerprint(draft.snapshot) !== blockFingerprint(block) ? draft : null);
-      if (switchToEditor) setView("editor");
+      if (switchToEditor) { setView("editor"); setMobilePane("stage"); }
       setQuery("");
       setSearchHits([]);
     } catch (cause) { showError(cause instanceof Error ? cause.message : String(cause)); }
@@ -141,6 +161,7 @@ export default function Workspace({ vault, onClose }: Props) {
   const createBlock = async () => {
     setCreating(true);
     try {
+      if (isAndroidRuntime()) await flushMobileDraft();
       const block = await api.createBlock({
         title: "無題の仮説",
         bodyMarkdown: "",
@@ -151,7 +172,7 @@ export default function Workspace({ vault, onClose }: Props) {
         changeReason: "作成",
       });
       await Promise.all([refreshBlocks(), refreshGraph()]);
-      setSelected(block); setRecovery(null); setView("editor");
+      setSelected(block); setRecovery(null); setView("editor"); setMobilePane("stage");
     } catch (cause) { showError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setCreating(false); }
   };
@@ -167,7 +188,7 @@ export default function Workspace({ vault, onClose }: Props) {
     await Promise.all([refreshBlocks(), refreshGraph()]);
     setSelected(changed);
     setRecovery(null);
-    setView("editor");
+    setView("editor"); setMobilePane("stage");
   };
 
   const handleDeleted = async (blockId: string) => {
@@ -214,12 +235,12 @@ export default function Workspace({ vault, onClose }: Props) {
   return (
     <main className="workspace">
       <header className="workspace-topbar">
-        <div className="workspace-brand"><button className="text-button" onClick={() => void onClose()}>戻る</button><div><strong>{currentVault.name}</strong><span>リビジョン {currentVault.revision}</span></div><button className="panel-toggle" onClick={() => setNavigatorOpen((open) => !open)} aria-label={navigatorOpen ? "左パネルを隠す" : "左パネルを表示"} title={navigatorOpen ? "左パネルを隠す" : "左パネルを表示"}><span aria-hidden="true">{navigatorOpen ? "◀" : "▶"}</span></button></div>
+        <div className="workspace-brand"><button className="text-button" onClick={() => void closeVault()}>戻る</button><div><strong>{currentVault.name}</strong><span>リビジョン {currentVault.revision}</span></div><button className="panel-toggle" onClick={() => setNavigatorOpen((open) => !open)} aria-label={navigatorOpen ? "左パネルを隠す" : "左パネルを表示"} title={navigatorOpen ? "左パネルを隠す" : "左パネルを表示"}><span aria-hidden="true">{navigatorOpen ? "◀" : "▶"}</span></button></div>
         <div className="global-search"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="本文・変数・文献・ファイルを検索" />{query && <button onClick={() => setQuery("")}>消す</button>}{searchHits.length > 0 && <div className="search-results">{searchHits.map((hit) => <button key={hit.blockId} onClick={() => void selectBlock(hit.blockId)}><strong>{hit.title}</strong><span>{hit.excerpt}</span></button>)}</div>}</div>
         <div className="topbar-safety"><span>ローカル保存</span><button className="panel-toggle" onClick={() => setInspectorOpen((open) => !open)} aria-label={inspectorOpen ? "右パネルを隠す" : "右パネルを表示"} title={inspectorOpen ? "右パネルを隠す" : "右パネルを表示"}><span aria-hidden="true">{inspectorOpen ? "▶" : "◀"}</span></button></div>
       </header>
 
-      <div className={`workspace-grid${navigatorOpen ? "" : " navigator-hidden"}${inspectorOpen ? "" : " inspector-hidden"}`}>
+      <div className={`workspace-grid${navigatorOpen ? "" : " navigator-hidden"}${inspectorOpen ? "" : " inspector-hidden"}`} data-mobile-pane={mobilePane} data-view={view}>
         <aside className="navigator">
           <div className="navigator-tabs">
             <button className={view === "editor" ? "active" : ""} onClick={() => setView("editor")}>ブロック</button>
@@ -241,16 +262,24 @@ export default function Workspace({ vault, onClose }: Props) {
         <section className="main-stage">
           {loading ? <div className="center-message">Vaultを開いている</div> : (
             <Suspense fallback={<div className="center-message">読み込み中</div>}>
-              {view === "editor" && (selected ? <BlockEditor key={selected.id} block={selected} recovery={recovery} onSaved={handleSaved} onRecoveryResolved={() => setRecovery(null)} onError={showError} /> : <WelcomeEmpty onCreate={() => void createBlock()} />)}
+              {view === "editor" && (selected ? <BlockEditor key={selected.id} block={selected} recovery={recovery} onSaved={handleSaved} onRecoveryResolved={() => setRecovery(null)} onError={showError} onRegisterMobileFlush={registerMobileFlush} /> : <WelcomeEmpty onCreate={() => void createBlock()} />)}
               {view === "graph" && <ResearchGraph data={graph} selectedBlockId={selected?.id ?? null} onSelectBlock={(id) => void selectBlock(id, false)} onRefresh={refreshGraph} onError={showError} />}
               {view === "integrity" && <IntegrityView onSelectBlock={(id) => void selectBlock(id)} onError={showError} />}
-              {view === "recovery" && <RecoveryCenter onBlocksChanged={async () => { await Promise.all([refreshBlocks(), refreshGraph()]); }} onError={showError} onNotice={showNotice} />}
+              {view === "recovery" && <RecoveryCenter onBlocksChanged={async () => { await Promise.all([refreshBlocks(), refreshGraph()]); }} onError={showError} onNotice={showNotice} onIntegrity={() => setView("integrity")} />}
             </Suspense>
           )}
         </section>
 
         <Inspector block={selected} graph={graph} onBlockChanged={(block) => void handleBlockChanged(block)} onDeleted={(id) => void handleDeleted(id)} onGraphChanged={async () => { await refreshGraph(); }} onError={showError} />
       </div>
+
+      <nav className="mobile-bottom-nav" aria-label="スマホ用ナビゲーション">
+        <button className={view === "editor" && mobilePane === "list" ? "active" : ""} aria-current={view === "editor" && mobilePane === "list" ? "page" : undefined} onClick={() => { setView("editor"); setMobilePane("list"); }}>一覧</button>
+        <button className={view === "editor" && mobilePane === "stage" ? "active" : ""} aria-current={view === "editor" && mobilePane === "stage" ? "page" : undefined} onClick={() => { setView("editor"); setMobilePane("stage"); }}>本文</button>
+        <button className={view === "editor" && mobilePane === "inspector" ? "active" : ""} aria-current={view === "editor" && mobilePane === "inspector" ? "page" : undefined} onClick={() => { setView("editor"); setMobilePane("inspector"); }}>詳細</button>
+        <button className={view === "graph" ? "active" : ""} aria-current={view === "graph" ? "page" : undefined} onClick={() => void leaveMobileEditor("graph")}>グラフ</button>
+        <button className={view === "recovery" || view === "integrity" ? "active" : ""} aria-current={view === "recovery" || view === "integrity" ? "page" : undefined} onClick={() => void leaveMobileEditor("recovery")}>データ</button>
+      </nav>
 
       {contextMenu && (
         <div className="block-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>

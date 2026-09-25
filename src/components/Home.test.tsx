@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../api", () => ({
   isDesktopRuntime: () => true,
+  isAndroidRuntime: () => false,
   api: {
     chatGptPluginStatus: mocks.pluginStatus,
     installChatGptPlugin: mocks.installPlugin,

@@ -1,6 +1,7 @@
 mod chatgpt_tunnel;
 mod credentials;
 mod mcp;
+mod mobile;
 mod plugin_install;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -634,6 +635,8 @@ fn open_chatgpt_tunnel_admin(state: tauri::State<'_, AppState>) -> CommandResult
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut state = AppState::default();
+    #[cfg(desktop)]
+    {
     state.mcp_available = match mcp::start(state.vault.clone()) {
         Ok(()) => true,
         Err(error) => {
@@ -644,12 +647,28 @@ pub fn run() {
     if state.mcp_available {
         state.tunnel.start_if_enabled();
     }
-    let app = tauri::Builder::default()
+    }
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init());
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build());
+    let app = builder
         .manage(state)
         .invoke_handler(tauri::generate_handler![
+            mobile::list_mobile_vaults,
+            mobile::create_mobile_vault,
+            mobile::open_mobile_vault,
+            mobile::prepare_mobile_import,
+            mobile::restore_mobile_backup,
+            mobile::attach_mobile_import,
+            mobile::discard_mobile_import,
+            mobile::create_mobile_backup,
+            mobile::restore_mobile_snapshot,
+            mobile::export_mobile_attachment,
+            mobile::discard_mobile_export,
             create_vault,
             open_vault,
             close_vault,
@@ -709,7 +728,7 @@ pub fn run() {
             open_chatgpt_tunnel_admin
         ])
         .build(tauri::generate_context!())
-        .expect("failed to build Sanctum desktop runtime");
+        .expect("failed to build Sanctum runtime");
     app.run(|app_handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {
             use tauri::Manager;

@@ -1,16 +1,22 @@
 import { useEffect, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { api } from "../api";
+import { api, isAndroidRuntime } from "../api";
 import { blockKindLabel, formatDateTime, snapshotKindLabel } from "../labels";
+import { saveMobileFile } from "../mobileFiles";
 import type { AutomaticBackupStatus, BackupRecord, HypothesisBlock, SnapshotRecord } from "../types";
 
 interface Props {
   onBlocksChanged: () => Promise<void>;
   onError: (message: string) => void;
   onNotice: (message: string) => void;
+  onIntegrity?: () => void;
 }
 
-export default function RecoveryCenter({ onBlocksChanged, onError, onNotice }: Props) {
+export default function RecoveryCenter(props: Props) {
+  return isAndroidRuntime() ? <MobileRecoveryCenter {...props} /> : <DesktopRecoveryCenter {...props} />;
+}
+
+function DesktopRecoveryCenter({ onBlocksChanged, onError, onNotice, onIntegrity }: Props) {
   const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [trash, setTrash] = useState<HypothesisBlock[]>([]);
@@ -118,7 +124,7 @@ export default function RecoveryCenter({ onBlocksChanged, onError, onNotice }: P
 
   return (
     <section className="recovery-page">
-      <header className="page-header"><h2>データ</h2><button className="button secondary" onClick={() => void reload()}>更新</button></header>
+      <header className="page-header"><h2>データ</h2><div className="inline-actions">{onIntegrity && <button className="button secondary mobile-only" onClick={onIntegrity}>整合性検査</button>}<button className="button secondary" onClick={() => void reload()}>更新</button></div></header>
 
       <section className="export-card">
         <div><h3>完全エクスポート</h3><span>Markdown・添付・BibTeX・関係・変数・ハッシュ</span></div>
@@ -156,6 +162,83 @@ export default function RecoveryCenter({ onBlocksChanged, onError, onNotice }: P
       </details>
     </section>
   );
+}
+
+function MobileRecoveryCenter({ onBlocksChanged, onError, onNotice, onIntegrity }: Props) {
+  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
+  const [trash, setTrash] = useState<HypothesisBlock[]>([]);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const reload = async () => {
+    try {
+      const [nextSnapshots, nextTrash] = await Promise.all([api.snapshots(), api.listDeletedBlocks()]);
+      setSnapshots(nextSnapshots);
+      setTrash(nextTrash);
+    } catch (cause) { onError(String(cause)); }
+  };
+  useEffect(() => { void reload(); }, []);
+
+  const backup = async () => {
+    setBusy("backup");
+    try {
+      const record = await api.createMobileBackup(password);
+      try {
+        const saved = await saveMobileFile(record.destinationPath, record.fileName);
+        if (saved) { setPassword(""); onNotice("暗号化Backupを書き出して検証した"); }
+      } finally { await api.discardMobileExport(record.destinationPath); }
+      await reload();
+    } catch (cause) { onError(String(cause)); }
+    finally { setBusy(null); }
+  };
+
+  const snapshot = async () => {
+    setBusy("snapshot");
+    try { await api.createSnapshot("Manual"); await reload(); onNotice("Snapshotを作成した"); }
+    catch (cause) { onError(String(cause)); }
+    finally { setBusy(null); }
+  };
+
+  const restoreSnapshot = async (item: SnapshotRecord) => {
+    setBusy(item.id);
+    try {
+      const restored = await api.restoreMobileSnapshot(item.id);
+      onNotice(`「${restored.name}」を新しいVaultとして復元した。ホームから開ける`);
+    } catch (cause) { onError(String(cause)); }
+    finally { setBusy(null); }
+  };
+
+  const restoreTrash = async (block: HypothesisBlock) => {
+    setBusy(block.id);
+    try {
+      await api.restoreDeletedBlock(block.id, block.rowVersion);
+      await Promise.all([reload(), onBlocksChanged()]);
+      onNotice(`「${block.title}」を復元した`);
+    } catch (cause) { onError(String(cause)); }
+    finally { setBusy(null); }
+  };
+
+  return <section className="recovery-page mobile-recovery">
+    <header className="page-header"><h2>データ</h2><div className="inline-actions">{onIntegrity && <button className="button secondary" onClick={onIntegrity}>整合性検査</button>}<button className="button secondary" onClick={() => void reload()}>更新</button></div></header>
+    <section className="recovery-card featured">
+      <header><h3>暗号化Backup</h3></header>
+      <p className="muted">端末の外へ保存する。PC版でも読み込める</p>
+      <label className="password-label">パスワード<input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="12文字以上" /></label>
+      <button className="button primary full" disabled={Boolean(busy) || password.length < 12} onClick={() => void backup()}>{busy === "backup" ? "書き出し中" : "Backupを書き出す"}</button>
+    </section>
+    <div className="recovery-grid">
+      <section className="recovery-card">
+        <header><h3>Snapshot</h3></header>
+        <button className="button secondary full" disabled={Boolean(busy)} onClick={() => void snapshot()}>{busy === "snapshot" ? "作成中" : "作成"}</button>
+        <div className="recovery-list">{snapshots.map((item) => <article key={item.id}><div><strong>{snapshotKindLabel[item.kind]}</strong><span>{formatDateTime(item.createdAt)} · リビジョン {item.revision}</span></div><button className="button secondary compact" disabled={Boolean(busy)} onClick={() => void restoreSnapshot(item)}>復元</button></article>)}{!snapshots.length && <p className="empty-row">Snapshotはまだない</p>}</div>
+      </section>
+      <section className="recovery-card">
+        <header><h3>ゴミ箱</h3><span>{trash.length}</span></header>
+        <div className="trash-list">{trash.map((block) => <article key={block.id}><div><strong>{block.title}</strong><span>{blockKindLabel[block.kind]}</span></div><button className="button secondary compact" disabled={Boolean(busy)} onClick={() => void restoreTrash(block)}>復元</button></article>)}{!trash.length && <p className="empty-row">空</p>}</div>
+      </section>
+    </div>
+    <p className="recovery-caveat">端末を削除・初期化すると、書き出していないVaultは失われる。Snapshotは同じ端末内に保存される</p>
+  </section>;
 }
 
 function formatBytes(bytes: number) {

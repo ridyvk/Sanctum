@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { api } from "../api";
+import { api, isAndroidRuntime } from "../api";
 import { blockFingerprint, toBlockSnapshot } from "../blockSnapshot";
 import { blockKindLabel, blockStatusLabel, formatDateTime } from "../labels";
 import type {
@@ -35,6 +35,7 @@ interface Props {
   onSaved: (block: HypothesisBlock) => void;
   onRecoveryResolved: () => void;
   onError: (message: string) => void;
+  onRegisterMobileFlush?: (flush: (() => Promise<void>) | null) => void;
 }
 
 const commonStatuses: BlockStatus[] = ["Idea", "Testing", "Supported", "Rejected"];
@@ -66,13 +67,15 @@ function formSnapshot(id: string, form: EditorForm): BlockSnapshot {
   };
 }
 
-export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolved, onError }: Props) {
+export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolved, onError, onRegisterMobileFlush }: Props) {
   const initialSnapshot = recovery?.snapshot ?? block;
   const [form, setForm] = useState<EditorForm>(() =>
     formFrom(initialSnapshot, recovery ? "復旧した編集内容" : "自動保存"),
   );
   const [saveState, setSaveState] = useState<SaveState>(recovery ? "recovered" : "saved");
-  const [viewMode, setViewMode] = useState<ViewMode>("split");
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    window.matchMedia?.("(max-width: 1079px)").matches ? "editor" : "split",
+  );
   const [documentTab, setDocumentTab] = useState<DocumentTab>("hypothesis");
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState(Boolean(recovery));
@@ -82,6 +85,7 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
   const generationRef = useRef(0);
   const savingRef = useRef(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  const flushedFingerprintRef = useRef<string | null>(null);
 
   useEffect(() => {
     formRef.current = form;
@@ -110,6 +114,27 @@ export default function BlockEditor({ block, recovery, onSaved, onRecoveryResolv
     expectedRowVersion: blockRef.current.rowVersion,
     changeReason: candidate.changeReason.trim() || "自動保存",
   });
+
+  // Phone navigation can unmount the editor before its draft timer fires.
+  // Register an awaited flush for Home/graph/data, and cover other unmounts.
+  useEffect(() => {
+    if (!isAndroidRuntime()) return;
+    const flush = async () => {
+      const latest = formRef.current;
+      const fingerprint = blockFingerprint(formSnapshot(block.id, latest));
+      if (fingerprint === blockFingerprint(committedRef.current)) return;
+      await api.persistRecoveryDraft(makeInput(latest));
+      flushedFingerprintRef.current = fingerprint;
+    };
+    onRegisterMobileFlush?.(flush);
+    return () => {
+      onRegisterMobileFlush?.(null);
+      const fingerprint = blockFingerprint(formSnapshot(block.id, formRef.current));
+      if (fingerprint !== flushedFingerprintRef.current) void flush().catch(onError);
+    };
+    // The registered function reads mutable form and block refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [block.id]);
 
   const commit = async (candidate: EditorForm, generation: number, forceRecovery = false) => {
     if (savingRef.current || (recoveryPending && !forceRecovery)) return;

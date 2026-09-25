@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
+import { readFile, writeFile } from "@tauri-apps/plugin-fs";
 import { diffWordsWithSpace } from "diff";
-import { api } from "../api";
+import { api, isAndroidRuntime } from "../api";
 import { lookupDoi, parseBibTeX, type CitationDraft } from "../citations";
+import { saveMobileFile } from "../mobileFiles";
 import {
   attachmentRelationLabel,
   blockKindLabel,
@@ -135,6 +137,7 @@ function VersionsPanel({ block, versions, onRestored, onError }: { block: Hypoth
 }
 
 function FilesPanel({ block, files, onChanged, onError }: { block: HypothesisBlock; files: Attachment[]; onChanged: () => void; onError: (message: string) => void }) {
+  const android = isAndroidRuntime();
   const [relation, setRelation] = useState<AttachmentRelation>("Reference");
   const relationRef = useRef(relation);
   const [filter, setFilter] = useState("");
@@ -147,7 +150,18 @@ function FilesPanel({ block, files, onChanged, onError }: { block: HypothesisBlo
     if (!paths.length) return;
     setBusy(true);
     try {
-      for (const path of paths) await api.attachFile(block.id, path, relationRef.current);
+      for (const [index, path] of paths.entries()) {
+        if (!android) { await api.attachFile(block.id, path, relationRef.current); continue; }
+        const name = decodeURIComponent(path.split("/").at(-1) ?? "").split("/").at(-1)!
+          .replace(/[\\/:*?"<>|\x00-\x1f]/g, "-").trim().replace(/^[ .]+|[ .]+$/g, "").slice(0, 140) || `添付-${index + 1}`;
+        const bytes = await readFile(path);
+        if (bytes.byteLength > 64 * 1024 * 1024) throw new Error("64 MBを超える添付ファイルはこの版では追加できない");
+        const transfer = await api.prepareMobileImport(name);
+        try {
+          await writeFile(transfer.path, bytes);
+          await api.attachMobileImport(transfer.id, name, block.id, relationRef.current);
+        } finally { await api.discardMobileImport(transfer.id, name); }
+      }
       onChanged();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : String(cause));
@@ -193,9 +207,15 @@ function FilesPanel({ block, files, onChanged, onError }: { block: HypothesisBlo
   const visible = files.filter((file) => file.displayName.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()));
   return <div className="panel-stack">
     <div className="inline-form"><select value={relation} onChange={(event) => setRelation(event.target.value as AttachmentRelation)}>{fileRelations.map((item) => <option key={item} value={item}>{attachmentRelationLabel[item]}</option>)}</select><button className="button primary compact" disabled={busy} onClick={() => void attach()}>{busy ? "追加中" : "選択"}</button></div>
-    <button className={`file-drop-zone ${dragging ? "active" : ""}`} disabled={busy} onClick={() => void attach()}>{dragging ? "ここへ追加" : "ファイルをドロップ"}</button>
+    <button className={`file-drop-zone ${dragging ? "active" : ""}`} disabled={busy} onClick={() => void attach()}>{android ? "ファイルを追加" : dragging ? "ここへ追加" : "ファイルをドロップ"}</button>
     {files.length > 5 && <input className="file-filter" value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="ファイル名で検索" />}
-    <div className="inspector-list">{visible.map((file) => <div className="file-row file-row-actions" key={file.id}><div><strong title={file.displayName}>{file.displayName}</strong><span>{attachmentRelationLabel[file.relationType]} · {formatBytes(file.byteSize)}</span></div><div className="file-actions">{file.mediaType?.startsWith("image/") && <button className="text-button" onClick={() => void showPreview(file)}>表示</button>}<button className="text-button" onClick={() => void api.openAttachment(file.id).catch((cause) => onError(String(cause)))}>開く</button><button className="text-button danger" onClick={() => void remove(file)}>外す</button></div></div>)}{!visible.length && <Empty text={files.length ? "一致するファイルはない" : "添付ファイルはない"} />}</div>
+    <div className="inspector-list">{visible.map((file) => <div className="file-row file-row-actions" key={file.id}><div><strong title={file.displayName}>{file.displayName}</strong><span>{attachmentRelationLabel[file.relationType]} · {formatBytes(file.byteSize)}</span></div><div className="file-actions">{file.mediaType?.startsWith("image/") && <button className="text-button" onClick={() => void showPreview(file)}>表示</button>}<button className="text-button" onClick={() => {
+      if (!android) { void api.openAttachment(file.id).catch((cause) => onError(String(cause))); return; }
+      void api.exportMobileAttachment(file.id).then(async (exported) => {
+        try { await saveMobileFile(exported.path, exported.fileName); }
+        finally { await api.discardMobileExport(exported.path); }
+      }).catch((cause) => onError(String(cause)));
+    }}>{android ? "保存" : "開く"}</button><button className="text-button danger" onClick={() => void remove(file)}>外す</button></div></div>)}{!visible.length && <Empty text={files.length ? "一致するファイルはない" : "添付ファイルはない"} />}</div>
     {preview && <div className="attachment-preview" role="dialog" aria-label={preview.name}><header><strong>{preview.name}</strong><button className="text-button" onClick={() => setPreview(null)}>閉じる</button></header><img src={preview.url} alt={preview.name} /></div>}
   </div>;
 }

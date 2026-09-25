@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HypothesisBlock, VaultSummary } from "../types";
 import Workspace from "./Workspace";
@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   softDeleteBlock: vi.fn(),
 }));
 
-vi.mock("../api", () => ({ api: mocks }));
+vi.mock("../api", () => ({ api: mocks, isAndroidRuntime: () => false }));
 vi.mock("./BlockEditor", () => ({
   default: ({ block }: { block: HypothesisBlock }) => <section aria-label="ブロック編集">{block.title}</section>,
 }));
@@ -87,5 +87,23 @@ describe("Workspace panels and block menu", () => {
 
     await waitFor(() => expect(mocks.softDeleteBlock).toHaveBeenCalledWith(block.id, block.rowVersion));
     expect(await screen.findByRole("status")).toHaveTextContent("履歴は残っている");
+  });
+
+  it("moves between the phone list, editor, inspector and graph without changing desktop panel controls", async () => {
+    const { container } = render(<Workspace vault={vault} onClose={vi.fn()} />);
+    const grid = container.querySelector(".workspace-grid");
+    const mobileNav = within(screen.getByRole("navigation", { name: "スマホ用ナビゲーション" }));
+    expect(grid).toHaveAttribute("data-mobile-pane", "list");
+
+    fireEvent.click(await screen.findByRole("button", { name: /最初の仮説/ }));
+    await waitFor(() => expect(grid).toHaveAttribute("data-mobile-pane", "stage"));
+    fireEvent.click(mobileNav.getByRole("button", { name: "詳細" }));
+    expect(grid).toHaveAttribute("data-mobile-pane", "inspector");
+    fireEvent.click(mobileNav.getByRole("button", { name: "グラフ" }));
+    expect(grid).toHaveAttribute("data-view", "graph");
+    fireEvent.click(mobileNav.getByRole("button", { name: "一覧" }));
+    expect(grid).toHaveAttribute("data-view", "editor");
+    expect(grid).toHaveAttribute("data-mobile-pane", "list");
+    expect(screen.getByRole("button", { name: "左パネルを隠す" })).toBeInTheDocument();
   });
 });
