@@ -19,8 +19,11 @@ The `Android preview` GitHub Actions workflow builds a debug-signed ARM64 APK as
 ```bash
 npm ci
 npm run tauri android init -- --ci
+npm run tauri icon -- src-tauri/icons/icon.png
 npm run tauri android build -- --apk --debug --target aarch64 --ci
 ```
+
+To install the preview from GitHub Actions, download the `sanctum-android-arm64-debug` artifact, extract its ZIP, and open the `.apk` inside on the phone. Android may ask you to allow installation from the specific app that opened the APK (for example, your browser or file manager); grant that permission only if you trust the APK and then return to the installer. This is a debug-signed preview outside Google Play, so system warnings may still appear. If Android says the APK is harmful or installation fails, note the exact message instead of forcing the install. Do not uninstall an existing preview without first exporting an encrypted backup: its app-private Vaults are removed on uninstall, and a different debug signing key may prevent an in-place update.
 
 To carry a Windows Vault to Android, make an encrypted `.sanctum-backup` on Windows, transfer that file to the phone, and select **Backupを読み込む** on the Android Home screen. To take a copy off the phone, use **データ → Backupを書き出す** and choose a document destination. Backups are verified before export and read back after writing. The Android file transfer UI currently limits individual imports and exports to 64 MB. Android's app-private Vault is removed if the app is uninstalled; keep an external encrypted backup before doing so.
 

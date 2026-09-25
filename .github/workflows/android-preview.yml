@@ -33,7 +33,24 @@ jobs:
           test -n "$NDK_DIR"
           echo "NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
       - run: npm run tauri android init -- --ci
-      - run: npm run tauri android build -- --apk --debug --target aarch64 --ci
+      - name: Apply Sanctum icon to the generated Android project
+        shell: bash
+        run: |
+          # android init starts with Tauri's default launcher icon. Keep the
+          # checked-in Windows icon and Android artwork as the source of truth.
+          npm run tauri icon -- src-tauri/icons/icon.png
+          icon_res=src-tauri/gen/android/app/src/main/res
+          for source in src-tauri/icons/android/mipmap-*/* src-tauri/icons/android/values/*; do
+            relative=${source#src-tauri/icons/android/}
+            install -Dm644 "$source" "$icon_res/$relative"
+          done
+          cmp src-tauri/icons/android/mipmap-xxxhdpi/ic_launcher_foreground.png \
+            "$icon_res/mipmap-xxxhdpi/ic_launcher_foreground.png"
+      - name: Build smaller Android preview APK
+        env:
+          CARGO_PROFILE_DEV_DEBUG: '0'
+          CARGO_PROFILE_DEV_STRIP: debuginfo
+        run: npm run tauri android build -- --apk --debug --target aarch64 --ci
       - uses: actions/upload-artifact@v4
         with:
           name: sanctum-android-arm64-debug
